@@ -1,0 +1,106 @@
+[package]
+name = "pillbox"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[build-dependencies]
+pillbox-core = { path = "../pillbox-core" }
+
+[dependencies]
+pillbox-core = { path = "../pillbox-core" }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+windows-registry = "0.5"
+windows-numerics = "0.2"
+windows-core = "0.61"
+ureq = "2"
+# WebView2 COM interfaces for the chat drawer (M5b). 0.38 is the last release on windows 0.61.
+webview2-com = "0.38"
+eframe = { version = "0.31", default-features = false, features = ["glow", "default_fonts"] }
+# M6 phone server (see README "Stack changes"): axum on a one-thread tokio runtime that exists
+# only while a QR code is on screen; tokio-util/futures-core stream files to the phone.
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "multipart"] }
+tokio = { version = "1.54.1", features = ["rt", "net", "time", "fs", "io-util", "macros", "sync"] }
+tokio-util = { version = "0.7.20", features = ["io"] }
+futures-core = "0.3.34"
+
+[dependencies.windows]
+version = "0.61"
+features = [
+    "ApplicationModel",
+    "Foundation",
+    "Foundation_Collections",
+    "UI_Notifications",
+    "UI_Notifications_Management",
+    "Graphics",
+    "Wdk_Graphics_Direct3D",
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
+    "Graphics_Imaging",
+    "Devices_Bluetooth",
+    "Devices_Enumeration",
+    "Devices_Radios",
+    "Globalization",
+    "Media",
+    "Media_Control",
+    "Media_Ocr",
+    "Storage_Streams",
+    "Win32_Devices_Bluetooth",
+    "Win32_Devices_Display",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_Media_MediaFoundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_NetworkManagement_WiFi",
+    "Win32_NetworkManagement_WindowsFirewall",
+    "Win32_Networking_NetworkListManager",
+    "Win32_Networking_WinSock",
+    "Win32_Security_Cryptography",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_Registry",
+    "Win32_System_SystemServices",
+    "Win32_System_Time",
+    "Win32_UI_Shell_Common",
+    "Win32_System_Wmi",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_UI_Input",
+    "Win32_Foundation",
+    "Win32_Graphics_Direct2D",
+    "Win32_Graphics_Direct2D_Common",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_DirectComposition",
+    "Win32_Graphics_DirectWrite",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_Imaging",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_IO",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Performance",
+    "Win32_System_Power",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_System_WinRT",
+    "Win32_System_WinRT_Direct3D11",
+    "Win32_System_WinRT_Graphics_Capture",
+    "Win32_UI_Accessibility",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+]

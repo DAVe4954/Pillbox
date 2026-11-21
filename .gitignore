@@ -1,0 +1,19 @@
+# Build output and release files (the installer goes on a GitHub release, not in the repo)
+/target
+/dist
+*.log
+
+# Not part of the app: notes, the code graph, tool settings
+/graphify-out
+/.agents
+/.claude
+/skills-lock.json
+/GLOSSARY.md
+
+# Docs: only what the README shows and links to
+/docs/*
+!/docs/images
+!/docs/m9
+!/docs/REFERENCE.md
+/docs/m9/*
+!/docs/m9/fade-themes.png

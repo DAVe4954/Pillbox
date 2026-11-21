@@ -1,0 +1,18 @@
+[package]
+name = "pillboxctl"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+# The command line for Pillbox's local script API (M7). Small on purpose: hooks start it on
+# every tool call of a coding agent, so it must start fast and pull in little.
+[dependencies]
+# Plain HTTP to 127.0.0.1 only, so no TLS (Pillbox's own ureq uses it for the web).
+ureq = { version = "2", default-features = false }
+# preserve_order keeps the key order of the user's settings.json when hooks are merged in.
+serde_json = { version = "1", features = ["preserve_order"] }
+
+# The process list, to find the agent that started a hook (so Pillbox can stop it).
+[dependencies.windows]
+version = "0.61"
+features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp"]
