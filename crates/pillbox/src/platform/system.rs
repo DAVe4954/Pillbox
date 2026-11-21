@@ -479,15 +479,25 @@ impl FrameTimer {
         const CREATE_WAITABLE_TIMER_HIGH_RESOLUTION: u32 = 0x2;
         const TIMER_ALL_ACCESS: u32 = 0x1F_0003;
         // SAFETY: no name or security attributes; the handle is owned by Self and closed in Drop.
-        let handle = unsafe {
+        let high = unsafe {
             CreateWaitableTimerExW(
                 None,
                 None,
                 CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
                 TIMER_ALL_ACCESS,
             )
-        }
-        .context("creating the frame timer")?;
+        };
+        let handle = match high {
+            Ok(h) => h,
+            Err(e) => {
+                // Windows 10 before version 1803 has no high-resolution timers: a normal one
+                // still paces frames, only a little less evenly.
+                tracing::info!("high-resolution frame timer unavailable ({e}); using a normal one");
+                // SAFETY: as above, without the high-resolution flag.
+                unsafe { CreateWaitableTimerExW(None, None, 0, TIMER_ALL_ACCESS) }
+                    .context("creating the frame timer")?
+            }
+        };
         Ok(Self(handle))
     }
 

@@ -4,7 +4,7 @@ members = ["crates/pillbox-core", "crates/pillbox", "crates/pillboxctl"]
 default-members = ["crates/pillbox"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 publish = false
 

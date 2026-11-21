@@ -1,4 +1,4 @@
-//! Pillbox: a floating Dynamic Island-style pill for Windows 11.
+//! Pillbox: a floating Dynamic Island-style pill for Windows 10 and 11.
 //!
 //! `pillbox.exe` runs Pillbox. `pillbox.exe --settings` runs the Settings window as its own
 //! process; the two talk only through the settings file, which Pillbox hot-reloads.

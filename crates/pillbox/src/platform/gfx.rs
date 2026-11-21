@@ -63,7 +63,7 @@ use windows::{
                 DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_TEXT_ALIGNMENT_TRAILING, DWRITE_TEXT_METRICS,
                 DWRITE_TRIMMING, DWRITE_TRIMMING_GRANULARITY_CHARACTER,
                 DWRITE_WORD_WRAPPING_NO_WRAP, DWRITE_WORD_WRAPPING_WRAP, DWriteCreateFactory,
-                IDWriteFactory, IDWriteTextFormat,
+                IDWriteFactory, IDWriteFontCollection, IDWriteTextFormat,
             },
             Dxgi::{
                 Common::{
@@ -84,7 +84,7 @@ use windows::{
         },
         UI::WindowsAndMessaging::PostMessageW,
     },
-    core::{Interface, w},
+    core::{BOOL, Interface, PCWSTR, w},
 };
 use windows_numerics::{Matrix3x2, Vector2};
 
@@ -188,6 +188,8 @@ pub struct Renderer {
     dc: ID2D1DeviceContext,
     brush: ID2D1SolidColorBrush,
     dwrite: IDWriteFactory,
+    /// The text and icon font families this PC has (`Fonts::pick`).
+    fonts: Fonts,
     formats: HashMap<(u32, bool, Align, bool, bool), IDWriteTextFormat>,
     /// Widths of measured text by (text, quarter-pixel size, bold): labels and numbers repeat
     /// from frame to frame, and laying text out is the costly part of measuring.
@@ -201,6 +203,62 @@ pub struct Renderer {
     _dcomp: IDCompositionDevice,
     _target: Option<IDCompositionTarget>,
     _visual: IDCompositionVisual,
+}
+
+/// Text fonts, best first: Windows 11 has Segoe UI Variable; Windows 10 only Segoe UI.
+const TEXT_FONTS: [PCWSTR; 2] = [w!("Segoe UI Variable Display"), w!("Segoe UI")];
+/// Icon fonts, best first: Windows 11 has Segoe Fluent Icons; Windows 10 has Segoe MDL2
+/// Assets, with the same code points for every icon Pillbox uses.
+const ICON_FONTS: [PCWSTR; 2] = [w!("Segoe Fluent Icons"), w!("Segoe MDL2 Assets")];
+
+/// The first of `candidates` for which `installed` is true, else the last one (DirectWrite
+/// then substitutes a font of its own rather than failing).
+fn first_installed<T: Copy>(candidates: &[T], installed: impl Fn(T) -> bool) -> Option<T> {
+    candidates
+        .iter()
+        .copied()
+        .find(|c| installed(*c))
+        .or_else(|| candidates.last().copied())
+}
+
+#[derive(Clone, Copy)]
+struct Fonts {
+    text: PCWSTR,
+    icon: PCWSTR,
+}
+
+impl Fonts {
+    /// Pick the font families this PC has. `PILLBOX_WIN10_FONTS=1` (developer aid) pretends the
+    /// Windows 11 fonts are missing, to see the Windows 10 look.
+    fn pick(dwrite: &IDWriteFactory) -> Self {
+        let pretend_win10 = std::env::var_os("PILLBOX_WIN10_FONTS").is_some();
+        let mut collection: Option<IDWriteFontCollection> = None;
+        // SAFETY: the out-pointer is a valid local Option; the factory is alive.
+        let _ = unsafe { dwrite.GetSystemFontCollection(&mut collection, false) };
+        let installed = |name: PCWSTR| -> bool {
+            if pretend_win10 && (name == TEXT_FONTS[0] || name == ICON_FONTS[0]) {
+                return false;
+            }
+            let Some(c) = &collection else {
+                return false;
+            };
+            let (mut index, mut exists) = (0u32, BOOL(0));
+            // SAFETY: `name` is a 'static wide literal; both out-pointers are valid locals.
+            unsafe { c.FindFamilyName(name, &mut index, &mut exists) }.is_ok() && exists.as_bool()
+        };
+        let fonts = Self {
+            text: first_installed(&TEXT_FONTS, installed).unwrap_or(TEXT_FONTS[1]),
+            icon: first_installed(&ICON_FONTS, installed).unwrap_or(ICON_FONTS[1]),
+        };
+        // SAFETY: both are 'static, null-terminated wide literals.
+        let (t, i) = unsafe { (fonts.text.to_string(), fonts.icon.to_string()) };
+        tracing::info!(
+            "fonts: {} and {}",
+            t.unwrap_or_default(),
+            i.unwrap_or_default()
+        );
+        fonts
+    }
 }
 
 /// Create a D3D11 device, preferring the integrated GPU so the discrete one can stay asleep.
@@ -303,6 +361,7 @@ impl Renderer {
             let brush = dc.CreateSolidColorBrush(&color(Rgba::rgb(0)), None)?;
             let dwrite: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)
                 .context("creating the DirectWrite factory")?;
+            let fonts = Fonts::pick(&dwrite);
 
             let dcomp: IDCompositionDevice = DCompositionCreateDevice(&dxgi_device)
                 .context("creating the composition device")?;
@@ -324,6 +383,7 @@ impl Renderer {
                 dc,
                 brush,
                 dwrite,
+                fonts,
                 formats: HashMap::new(),
                 widths: HashMap::new(),
                 images: HashMap::new(),
@@ -448,10 +508,15 @@ impl Renderer {
                 Ok(())
             }))?;
             let session = pool.CreateCaptureSession(&item)?;
-            if let Err(e) = session.SetIsBorderRequired(false) {
-                tracing::warn!("could not turn off the capture border: {e}");
+            // Windows 10 cannot turn the capture border off: it would draw a yellow frame
+            // around the whole screen for as long as Pillbox shows glass. Fail instead, so the
+            // glass surfaces fall back to their tinted look without the live blur.
+            session
+                .SetIsBorderRequired(false)
+                .context("turning off the capture border (needs Windows 11)")?;
+            if let Err(e) = session.SetIsCursorCaptureEnabled(false) {
+                tracing::warn!("could not leave the pointer out of the capture: {e}");
             }
-            session.SetIsCursorCaptureEnabled(false)?;
             let dirty_regions = session
                 .SetDirtyRegionMode(GraphicsCaptureDirtyRegionMode::ReportOnly)
                 .is_ok();
@@ -806,9 +871,9 @@ impl Renderer {
                 .dwrite
                 .CreateTextFormat(
                     if icon {
-                        w!("Segoe Fluent Icons")
+                        self.fonts.icon
                     } else {
-                        w!("Segoe UI Variable Display")
+                        self.fonts.text
                     },
                     None,
                     if bold {
@@ -1423,5 +1488,31 @@ impl Frame<'_> {
                 .context("Present")?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::first_installed;
+
+    #[test]
+    fn the_best_installed_font_wins_and_the_last_is_the_fallback() {
+        let fonts = ["Segoe Fluent Icons", "Segoe MDL2 Assets"];
+        // Windows 11: both installed, the first wins.
+        assert_eq!(
+            first_installed(&fonts, |_| true),
+            Some("Segoe Fluent Icons")
+        );
+        // Windows 10: only the second.
+        assert_eq!(
+            first_installed(&fonts, |f| f == "Segoe MDL2 Assets"),
+            Some("Segoe MDL2 Assets")
+        );
+        // Neither found: the last one, for DirectWrite to substitute.
+        assert_eq!(
+            first_installed(&fonts, |_| false),
+            Some("Segoe MDL2 Assets")
+        );
+        assert_eq!(first_installed::<&str>(&[], |_| true), None);
     }
 }

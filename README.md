@@ -1,6 +1,6 @@
 # Pillbox
 
-**A small floating pill at the top of your screen that opens into a card with your music, clipboard, reminders and PC controls.** Pillbox is a free, private Windows 11 app in the spirit of the iPhone's Dynamic Island. Rest the mouse on the pill and it springs open; move away and it closes. A simple installer, nothing sent to anyone, and almost no CPU use.
+**A small floating pill at the top of your screen that opens into a card with your music, clipboard, reminders and PC controls.** Pillbox is a free, private Windows 10 and 11 app in the spirit of the iPhone's Dynamic Island. Rest the mouse on the pill and it springs open; move away and it closes. A simple installer, nothing sent to anyone, and almost no CPU use.
 
 <p align="center">
   <img src="docs/images/home-widgets.png" alt="The open Pillbox card on the Home tab with a clock, focus timer, battery, PC stats and year progress" width="420">
@@ -40,7 +40,7 @@
 
 ## What you need
 
-- **Windows 11** (64-bit). It was built and tested on Windows 11 only.
+- **Windows 11**, or **Windows 10** version 1809 or newer (64-bit). It was built and tested on Windows 11; Windows 10 support is new and less tested.
 - Nothing else for the easy way: no admin rights and no extra downloads.
 - To build it yourself you also need Rust and the Visual Studio C++ Build Tools (see [Build it yourself](#build-it-yourself)).
 
@@ -222,7 +222,12 @@ The long technical notes on every one of these, including exactly how phone tran
 
 ## Good to know (limits)
 
-- **Windows 11 only.** Older Windows versions and other systems are not supported.
+- **Windows 10 and 11.** On Windows 10 a few things look or work differently:
+  - The icons use Windows 10's icon set and the text uses Segoe UI, so it looks slightly plainer.
+  - The glass surfaces (Acrylic, Liquid glass, Candy glass) show a tinted fill instead of the live blur of what is behind the pill. Windows 10 would draw a yellow frame around the whole screen while capturing it, so Pillbox does not capture there.
+  - The chat drawer needs the free Microsoft Edge WebView2 Runtime. Most Windows 10 PCs have it; the installer tells you if yours does not.
+  - Windows notifications on the pill may not be allowed on every Windows 10 PC.
+  - Windows versions before Windows 10 1809, and other systems, are not supported.
 - **Not signed.** Windows shows a one-time "protected your PC" warning (see [Download](#download-and-start-it-the-easy-way)).
 - **No automatic updates.** You replace the files yourself (see [Updating and removing it](#updating-and-removing-it)).
 - **Full-screen games:** nothing can draw over a game that uses *exclusive* full screen. Pillbox then hides or shows its stats strip according to your setting; games in "borderless" or "windowed full screen" mode work best.

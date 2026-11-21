@@ -1972,7 +1972,7 @@ impl SettingsApp {
         s.row(
             icon::INFO,
             "Version",
-            "A floating pill for Windows 11",
+            "A floating pill for Windows 10 and 11",
             "about",
             |ui| {
                 ui.label(

@@ -21,7 +21,7 @@ use std::{
 use serde_json::{Value, json};
 
 const HELP: &str = "\
-pillboxctl: talk to Pillbox (the floating pill for Windows 11).
+pillboxctl: talk to Pillbox (the floating pill for Windows 10 and 11).
 
 USAGE
   pillboxctl flash <text> [--source NAME] [--ms N] [--urgent]
