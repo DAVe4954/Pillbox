@@ -3,12 +3,12 @@
 **A small floating pill at the top of your screen that opens into a card with your music, clipboard, reminders and PC controls.** Pillbox is a free, private Windows 10 and 11 app in the spirit of the iPhone's Dynamic Island. Rest the mouse on the pill and it springs open; move away and it closes. A simple installer, nothing sent to anyone, and almost no CPU use.
 
 <p align="center">
-  <img src="docs/images/home-widgets.png" alt="The open Pillbox card on the Home tab with a clock, focus timer, battery, PC stats and year progress" width="420">
+  <img src="docs/images/home-widgets.png" alt="The open Pillbox card in the Aurora theme on the Home tab: a 24-hour day clock, focus timer, battery, PC stats and year progress" width="420">
   &nbsp;&nbsp;
-  <img src="docs/images/pill-states.png" alt="The closed pill showing the time, a short notice, and the song that is playing" width="270">
+  <img src="docs/images/pill-states.png" alt="The closed pill as a clock in the Aurora theme, as the notice Pillbox is running in Golden hour, and as a music player tinted with the song's cover colours" width="270">
 </p>
 
-<p align="center"><sub>Left: the open card. Right: the closed pill as a clock, as a short notice, and as a tiny music player. The screenshots use demo data.</sub></p>
+<p align="center"><sub>Left: the open card. Right: the closed pill as a clock, as a short notice, and as a tiny music player. Every screenshot uses demo data and a different theme.</sub></p>
 
 **In short:**
 
@@ -71,7 +71,7 @@ Pillbox never opens a window of its own and has no taskbar button; it lives in t
 
 The closed pill is not just a clock. It shows the time, or a tiny music player (title, a live equalizer, the cover colours), or a short notice: microphone muted, Caps Lock on, a call timer, a screenshot saved, a reminder ringing, a new notification.
 
-<p align="center"><img src="docs/images/pill-states.png" alt="Three closed-pill states: the time, the notice 'Screenshot saved', and a song title with an equalizer" width="270"></p>
+<p align="center"><img src="docs/images/pill-states.png" alt="Three closed-pill states: the time, the notice Pillbox is running, and a song title with an equalizer" width="270"></p>
 
 ---
 
@@ -81,25 +81,27 @@ The closed pill is not just a clock. It shows the time, or a tiny music player (
 
 A grid of small tiles you choose in Settings: **clock**, **world clocks**, **day clock** (24-hour dial with sunrise and sunset), **weather**, **next reminders**, **sun and moon**, **to-do list**, **quick note**, **calculator**, **focus timer**, **countdown**, **day and year progress**, **battery**, **screen time**, **play time**, **PC stats**, **photos**, and (only if you switch online widgets on) ping, website status, currency rates and air quality.
 
-<p align="center"><img src="docs/images/home-widgets.png" alt="The Home tab with a clock dial, focus timer, battery, PC stats and year progress tiles" width="420"></p>
+<p align="center"><img src="docs/images/home-widgets.png" alt="The Home tab in the Aurora theme with a day clock, focus timer, battery, PC stats and year progress" width="420"></p>
 
 Drag a widget out with its small corner button and it **pops out onto the desktop** as its own floating tile (right-click it to close).
 
 **Weather.** With the *detailed* weather look (Settings > Home & widgets), **click the Weather tile to expand it**: today's temperatures from 6:00 to 21:00 appear as a small curve (the hour you are in is highlighted), and below them the next five days, each with the weekday, the weather, the high and low and the chance of rain.
 
+<p align="center"><img src="docs/images/weather.png" alt="The Weather tile expanded in the Midnight theme: now 5 degrees and overcast, a curve of today's temperatures from 6:00 to 21:00, and five day cards from Monday to Friday" width="420"></p>
+
 **Play time.** Time spent in *games* is counted per game and per day (the last 60 days, kept only on your PC). Well-known games such as Roblox, Minecraft, Fortnite, Valorant or THE FINALS count whenever they are the app in front, in a window too, and show under their real name. Other games count while they run full screen. **Click the Play time tile to expand it**: it shows a chip for each of the last 7 days and, for the day you pick, every game you played with how long and a bar to compare them. Only games are counted: browsers, video players, Steam and other launchers, Discord and similar are ignored.
 
 <p align="center">
-  <img src="docs/images/home.png" alt="The Play time tile closed: 1h 55m today, week 7h 20m, most played Elden Ring" width="340">
+  <img src="docs/images/home.png" alt="The Play time tile closed in the Deep sea theme: today's time, this week's total and the most played game" width="340">
   &nbsp;
-  <img src="docs/images/play-time.png" alt="The Play time tile expanded: a chip for each day and the games played that day with bars" width="340">
+  <img src="docs/images/play-time.png" alt="The Play time tile expanded: a chip for each day and the games played that day, such as Roblox and Minecraft, with bars" width="340">
 </p>
 
 ### Music
 
 Shows what is playing in **any** player (Spotify, YouTube in a browser, VLC...): cover, title, artist, a progress bar you can click or drag, previous, play/pause, next. Five progress-bar looks (line, bar, dots, wave, segments) and a live equalizer in the pill.
 
-<p align="center"><img src="docs/images/music.png" alt="The Music tab: cover, title and controls on the left, synced lyrics scrolling on the right" width="560"></p>
+<p align="center"><img src="docs/images/music.png" alt="The Music tab glowing in the cover's colours: cover, title and controls on the left, synced lyrics on the right" width="560"></p>
 
 - **Synced lyrics** (Settings > Music, off by default): lyrics scroll in time with the song on the right of the card. Scroll the wheel over them to look around and press **Return to live** to come back; pauses in the song show as three dots. Lyrics come from the free LRCLIB service and are cached.
 - The **colours** of the card and the closed pill follow the cover, and the card's background glow reacts to the bass, middle and treble of what you hear.
@@ -108,19 +110,19 @@ Shows what is playing in **any** player (Spotify, YouTube in a browser, VLC...):
 
 A history of what you copied (text, links, pictures, files), searchable, with **pin**, **copy back**, **delete**, and **text from pictures** (it reads the words in a screenshot). Stored encrypted for your Windows account. Text snippets you save are one click away. Anything a password manager marks as secret is not recorded, you can list apps to ignore, and unpinned copies are **deleted after 2 days**. Pinned items and snippets stay.
 
-<p align="center"><img src="docs/images/clipboard.png" alt="The Clipboard tab: a search box, filters (All, Text, Links, Pictures, Files, Pinned, Snippets) and a list of recent copies" width="420"></p>
+<p align="center"><img src="docs/images/clipboard.png" alt="The Clipboard tab in the Violet theme: a search box, filters and a list of recent copies, one of them pinned" width="420"></p>
 
 ### Shelf
 
 Drop files on the pill to keep them on a **shelf**, then drag them out into any other app later. New screenshots land here too. Right-click a file for more (open, open with..., show in folder, send to your phone, remove).
 
-<p align="center"><img src="docs/images/shelf.png" alt="The Shelf tab with five files: a spreadsheet, a text file, a PDF, a zip and a screenshot" width="420"></p>
+<p align="center"><img src="docs/images/shelf.png" alt="The Shelf tab in the Forest theme with five files: a spreadsheet, a text file, a PDF, a zip and a screenshot" width="420"></p>
 
 ### Reminders
 
 Type for example "call mum at 18:30", "in 10m tea", "tomorrow 15:00 dentist" or "weekdays 9:00 stand-up" and press Enter. Reminders ring on the pill with the Windows alarm sound; snooze or mark done right there.
 
-<p align="center"><img src="docs/images/reminders.png" alt="The Reminders tab: a quick-add box and four reminders, two of them repeating" width="420"></p>
+<p align="center"><img src="docs/images/reminders.png" alt="The Reminders tab in the Sunset theme: a quick-add box and four reminders, two of them repeating" width="420"></p>
 
 ### Controls
 
@@ -132,19 +134,19 @@ Type for example "call mum at 18:30", "in 10m tea", "tomorrow 15:00 dentist" or 
 - A line with a timer and a **Mute** button while any app is using your microphone (a call).
 - Six **launcher** slots: put your favourite apps there.
 
-<p align="center"><img src="docs/images/controls.png" alt="The Controls tab: volume and brightness sliders, Wi-Fi and Bluetooth cards, Mic, Sound and Mirror buttons, and six empty launcher slots" width="420"></p>
+<p align="center"><img src="docs/images/controls.png" alt="The Controls tab in the Midnight neon theme: volume and brightness sliders, Wi-Fi and Bluetooth cards, Mic, Sound and Mirror buttons, and launcher slots" width="420"></p>
 
 ### System
 
 One card each for **CPU**, **GPU**, **memory**, **disk activity**, **network speed** and **battery**. You can also open the same cards as a separate floating window from the tray menu.
 
-<p align="center"><img src="docs/images/system.png" alt="The System tab: six cards for CPU, GPU, RAM, disk, network and battery" width="560"></p>
+<p align="center"><img src="docs/images/system.png" alt="The System tab in the Ocean theme: cards for CPU, GPU, RAM, disk, network and battery" width="560"></p>
 
 ### Activity (coding assistants)
 
 For people who use **Claude Code** or **Codex**: shows what each assistant is doing in each session (working, waiting for you, finished), your usage limits, and lets you **Allow** or **Deny** a permission question right on the pill. Connecting an assistant is explicit and never automatic: see the command-line helper in [docs/REFERENCE.md](docs/REFERENCE.md) (`pillboxctl hooks claude --apply`).
 
-<p align="center"><img src="docs/images/activity.png" alt="The Activity tab: a Claude Code card saying Needs you, and three sessions (waiting, working, done)" width="420"></p>
+<p align="center"><img src="docs/images/activity.png" alt="The Activity tab in the Lava theme: a Claude Code card saying Needs you, and three sessions (waiting, working, done)" width="420"></p>
 
 ### Notifications
 
@@ -166,9 +168,9 @@ When a game runs full screen Pillbox can **hide**, shrink into a thin **stats st
 
 You can change how Pillbox looks without touching any code: many **surfaces** (black, graphite, glass, soft colours), **colour schemes** for the pill and the card, a placement on the **top, left or right** edge, and a **size** from 80% to 140%.
 
-<p align="center"><img src="docs/images/themes.png" alt="The Home tab in four colour schemes: Ocean, Forest, Sunset and Violet" width="900"></p>
+<p align="center"><img src="docs/images/themes.png" alt="The Home tab in four colour schemes: Ember, Mono, Cotton candy and Forest mist" width="900"></p>
 
-<p align="center"><sub>The same Home tab in Ocean, Forest, Sunset and Violet.</sub></p>
+<p align="center"><sub>The same Home tab in Ember, Mono, Cotton candy and Forest mist.</sub></p>
 
 The colour schemes come in two kinds. Seven are **one colour** (Midnight, Ocean, Forest, Sunset, Violet, Ember, Mono). Eight are **fades** of several colours: Aurora, Golden hour, Deep sea, Midnight neon, Forest mist, Lava, Mono fade and Cotton candy. Three of the fades **move gently**: Aurora and Lava drift slowly and Midnight neon shimmers now and then. They stand still when Pillbox is hidden, while a game is full screen, or when you switch **Animate backgrounds** off.
 
@@ -198,9 +200,9 @@ Open **Settings** from the gear (or the tray icon). It is a normal window with e
  Every change is **saved automatically** a moment after you make it and Pillbox applies it at once. Nothing needs an OK button. **About > Reset all settings** puts everything back (your clipboard history, reminders and shelf are kept).
 
 <p align="center">
-  <img src="docs/images/settings-appearance.png" alt="Settings, Appearance page: a grid of surfaces to pick from, such as Black, Graphite, Liquid Glass and Peach" width="440">
+  <img src="docs/images/settings-appearance.png" alt="Settings, Appearance page: the app themes as picture cards, Golden hour selected" width="440">
   &nbsp;
-  <img src="docs/images/settings-widgets.png" alt="Settings, Widgets page: the list of Home widgets in order, and buttons to add more" width="440">
+  <img src="docs/images/settings-widgets.png" alt="Settings, Home and widgets page: the list of Home widgets in order, and buttons to add more" width="440">
 </p>
 
 Settings are stored in the file `%APPDATA%\Pillbox\settings.json` (type that into the Explorer address bar). You can edit it by hand; Pillbox picks the change up immediately.
