@@ -38,8 +38,20 @@ pub fn is_game_name(name: &str) -> bool {
 }
 
 impl PlayLog {
-    /// Drop everything that is not a game: entries written before the filter existed.
+    /// Tidy a log written by an older version: drop everything that is not a game, and file
+    /// the known games kept under their file name ("Discovery-d") under their real name
+    /// ("THE FINALS").
     pub fn remove_non_games(&mut self) {
+        for games in self.days.values_mut() {
+            for (exe, name) in crate::games::KNOWN_GAMES {
+                let old = file_game_name(exe);
+                if old != *name
+                    && let Some(seconds) = games.remove(&old)
+                {
+                    *games.entry((*name).to_string()).or_default() += seconds;
+                }
+            }
+        }
         for games in self.days.values_mut() {
             games.retain(|name, _| is_game_name(name));
         }
@@ -189,9 +201,18 @@ pub fn format_duration(seconds: u64) -> String {
     }
 }
 
-/// A readable game name from its executable: `FortniteClient-Win64-Shipping.exe` → "Fortnite",
-/// `eldenring.exe` → "Eldenring", `RocketLeague.exe` → "RocketLeague".
+/// A readable game name from its executable: a known game by the name people know it by
+/// (`RobloxPlayerBeta.exe` → "Roblox", `discovery.exe` → "THE FINALS"), any other from its file
+/// name (`FortniteClient-Win64-Shipping.exe` → "Fortnite", `RocketLeague.exe` → "RocketLeague").
 pub fn game_name(exe: &str) -> String {
+    match crate::games::known_game(exe) {
+        Some(name) => name.to_string(),
+        None => file_game_name(exe),
+    }
+}
+
+/// A game name made from the executable's file name alone (what older logs hold).
+fn file_game_name(exe: &str) -> String {
     let mut name = exe.trim();
     if name.to_ascii_lowercase().ends_with(".exe") {
         name = &name[..name.len() - 4];
@@ -359,11 +380,30 @@ mod tests {
     }
 
     #[test]
+    fn old_logs_are_tidied() {
+        let mut log = PlayLog::default();
+        let mut day = BTreeMap::new();
+        day.insert("Discovery-d".to_string(), 100);
+        day.insert("THE FINALS".to_string(), 20);
+        day.insert("Snippingtool".to_string(), 30);
+        day.insert("Fortnite".to_string(), 50);
+        log.days.insert("2026-11-21".into(), day);
+        log.remove_non_games();
+        let day = &log.days["2026-11-21"];
+        assert_eq!(day.get("THE FINALS"), Some(&120));
+        assert_eq!(day.get("Fortnite"), Some(&50));
+        assert_eq!(day.len(), 2, "{day:?}");
+    }
+
+    #[test]
     fn game_names_from_executables() {
         assert_eq!(game_name("FortniteClient-Win64-Shipping.exe"), "Fortnite");
         assert_eq!(game_name("fortniteclient-win64-shipping.exe"), "Fortnite");
-        assert_eq!(game_name("eldenring.exe"), "Eldenring");
-        assert_eq!(game_name("RocketLeague.exe"), "RocketLeague");
+        assert_eq!(game_name("eldenring.exe"), "Elden Ring");
+        assert_eq!(game_name("RobloxPlayerBeta.exe"), "Roblox");
+        assert_eq!(game_name("Discovery-d.exe"), "THE FINALS");
+        assert_eq!(game_name("SomeIndieGame.exe"), "SomeIndieGame");
+        assert_eq!(game_name("RocketLeague.exe"), "Rocket League");
         assert_eq!(game_name("Client.exe"), "Client");
         assert_eq!(game_name(".exe"), ".exe");
     }

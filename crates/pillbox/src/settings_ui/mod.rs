@@ -29,7 +29,7 @@ use crate::{
 };
 
 /// The window title; also how the frame helper finds the window.
-const TITLE: &str = "Pillbox Settings";
+pub const TITLE: &str = "Pillbox Settings";
 /// A change is written this long after the last edit (a slider being dragged writes once).
 const SAVE_AFTER: Duration = Duration::from_millis(300);
 /// How often the window looks for changes Pillbox made to the file.
@@ -38,6 +38,7 @@ const DISK_CHECK: Duration = Duration::from_secs(1);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
     General,
+    ClosedPill,
     Appearance,
     Music,
     Widgets,
@@ -50,8 +51,9 @@ pub enum Page {
 }
 
 impl Page {
-    const ALL: [Page; 10] = [
+    const ALL: [Page; 11] = [
         Page::General,
+        Page::ClosedPill,
         Page::Appearance,
         Page::Music,
         Page::Widgets,
@@ -66,11 +68,12 @@ impl Page {
     fn title(self) -> &'static str {
         match self {
             Page::General => "General",
+            Page::ClosedPill => "Closed pill",
             Page::Appearance => "Appearance",
             Page::Music => "Music",
-            Page::Widgets => "Widgets",
+            Page::Widgets => "Home & widgets",
             Page::Clipboard => "Clipboard & Shelf",
-            Page::Notifications => "Notifications",
+            Page::Notifications => "Notifications & calls",
             Page::Games => "Games & Apps",
             Page::Agents => "Agents",
             Page::Shortcuts => "Shortcuts",
@@ -78,9 +81,29 @@ impl Page {
         }
     }
 
+    /// One line under the page heading: what the page is for.
+    fn blurb(self) -> &'static str {
+        match self {
+            Page::General => "Starting, where Pillbox sits, how big it is, hiding and opening",
+            Page::ClosedPill => {
+                "What the small pill shows: the clock, a song, a call and other notes"
+            }
+            Page::Appearance => "Colours, themes, fades and glass",
+            Page::Music => "The song on the pill and the Music tab",
+            Page::Widgets => "The Home tab's widgets, weather and the System window",
+            Page::Clipboard => "Clipboard history, snippets, the file shelf and your phone",
+            Page::Notifications => "Windows notifications, calls and the microphone, reminders",
+            Page::Games => "What Pillbox does while you play, and rules for single apps",
+            Page::Agents => "Claude Code, Codex and the chat drawer",
+            Page::Shortcuts => "Keyboard shortcuts and the launcher",
+            Page::About => "Version, your data, and resetting",
+        }
+    }
+
     fn icon(self) -> &'static str {
         match self {
             Page::General => icon::SETTINGS,
+            Page::ClosedPill => icon::HOME,
             Page::Appearance => icon::PALETTE,
             Page::Music => icon::MUSIC,
             Page::Widgets => icon::TILES,
@@ -143,6 +166,9 @@ pub struct SettingsApp {
     open_apps: Vec<String>,
     media_apps: Vec<String>,
     autostart: bool,
+    /// Apps using the microphone (General > On the closed pill), and when that was read.
+    mic_apps: Vec<String>,
+    mic_read: Option<Instant>,
     new: NewEntries,
     city: CitySearch,
     confirm_reset: bool,
@@ -246,6 +272,8 @@ impl SettingsApp {
             open_apps: Vec::new(),
             media_apps: Vec::new(),
             autostart: false,
+            mic_apps: Vec::new(),
+            mic_read: None,
             new: NewEntries::default(),
             city: CitySearch::default(),
             confirm_reset: false,
@@ -629,6 +657,15 @@ impl SettingsApp {
                     // At most 860 wide; never wider than the window allows.
                     ui.set_max_width(ui.available_width().min(860.0));
                     if query.is_empty() {
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(self.page.blurb())
+                                    .font(regular(13.0))
+                                    .color(SUB),
+                            )
+                            .wrap(),
+                        );
+                        ui.add_space(10.0);
                         self.show_page(ui, self.page, "");
                     } else {
                         let before = ui.min_rect().height();

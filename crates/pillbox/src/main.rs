@@ -68,8 +68,14 @@ fn main() {
     // Checked before logging starts: a second copy must not truncate the running copy's log.
     let _instance = match platform::system::SingleInstance::acquire(settings_mode) {
         Ok(Some(instance)) => Some(instance),
-        Ok(None) => return, // already running
-        Err(_) => None,     // could not tell; better to run than to refuse
+        Ok(None) => {
+            // Already running. A second Settings window brings the first one forward instead.
+            if settings_mode {
+                platform::settings_window::bring_forward(settings_ui::TITLE);
+            }
+            return;
+        }
+        Err(_) => None, // could not tell; better to run than to refuse
     };
     if settings_mode {
         init_logging("settings.log");

@@ -221,6 +221,8 @@ pub enum WidgetAction {
     PlayToggle,
     /// Show this day (0 = today) in the expanded Play time card.
     PlayDay(usize),
+    /// Expand or fold the detailed Weather card (the next five days).
+    WeatherToggle,
 }
 
 /// A short notice on the resting pill: lock keys, mic mute, screenshot saved, colour copied.
@@ -769,7 +771,7 @@ fn paint_resting(f: &mut Frame<'_>, s: &Scene<'_>, rect: Rect, alpha: f32) {
         return paint_call(f, s, call, rect, alpha);
     }
     match &s.music {
-        Some(m) if m.playing => paint_music_pill(f, s, m, rect, alpha),
+        Some(m) if m.playing && s.music_settings.on_pill => paint_music_pill(f, s, m, rect, alpha),
         _ => match s.face {
             Face::Empty => {}
             Face::Pet { blink } => paint_pet(f, s, *blink, rect, alpha),

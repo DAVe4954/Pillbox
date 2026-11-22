@@ -61,7 +61,90 @@ pub const NOT_GAMES: &[&str] = &[
     "windowsterminal.exe",
     "cmd.exe",
     "powershell.exe",
+    // Windows' own tools: a screenshot or the Start menu covers the screen for a moment.
+    "snippingtool.exe",
+    "screenclippinghost.exe",
+    "screensketch.exe",
+    "shellexperiencehost.exe",
+    "startmenuexperiencehost.exe",
+    "searchhost.exe",
+    "searchapp.exe",
+    "lockapp.exe",
+    "textinputhost.exe",
+    "taskmgr.exe",
+    "systemsettings.exe",
+    "msedgewebview2.exe",
+    "pillbox.exe",
 ];
+
+/// Games known by their executable (lower case), with the name people know them by. These
+/// count as play time whenever they are the app in front, also in a window (Roblox usually
+/// runs windowed) and on any screen; other games count while they are fullscreen.
+pub const KNOWN_GAMES: &[(&str, &str)] = &[
+    ("robloxplayerbeta.exe", "Roblox"),
+    ("minecraft.windows.exe", "Minecraft"),
+    ("fortniteclient-win64-shipping.exe", "Fortnite"),
+    ("valorant-win64-shipping.exe", "Valorant"),
+    ("cs2.exe", "Counter-Strike 2"),
+    ("csgo.exe", "Counter-Strike: GO"),
+    ("league of legends.exe", "League of Legends"),
+    ("r5apex.exe", "Apex Legends"),
+    ("r5apex_dx12.exe", "Apex Legends"),
+    ("overwatch.exe", "Overwatch 2"),
+    ("rocketleague.exe", "Rocket League"),
+    ("discovery.exe", "THE FINALS"),
+    ("discovery-d.exe", "THE FINALS"),
+    ("gta5.exe", "GTA V"),
+    ("gta5_enhanced.exe", "GTA V"),
+    ("rdr2.exe", "Red Dead Redemption 2"),
+    ("eldenring.exe", "Elden Ring"),
+    ("dota2.exe", "Dota 2"),
+    ("genshinimpact.exe", "Genshin Impact"),
+    ("starrail.exe", "Honkai: Star Rail"),
+    ("zenlesszonezero.exe", "Zenless Zone Zero"),
+    ("cod.exe", "Call of Duty"),
+    ("modernwarfare.exe", "Call of Duty"),
+    ("rainbowsix.exe", "Rainbow Six Siege"),
+    ("rainbowsix_vulkan.exe", "Rainbow Six Siege"),
+    ("tslgame.exe", "PUBG"),
+    ("destiny2.exe", "Destiny 2"),
+    ("marvel-win64-shipping.exe", "Marvel Rivals"),
+    ("cyberpunk2077.exe", "Cyberpunk 2077"),
+    ("witcher3.exe", "The Witcher 3"),
+    ("bg3.exe", "Baldur's Gate 3"),
+    ("bg3_dx11.exe", "Baldur's Gate 3"),
+    ("helldivers2.exe", "Helldivers 2"),
+    ("palworld-win64-shipping.exe", "Palworld"),
+    ("rustclient.exe", "Rust"),
+    ("terraria.exe", "Terraria"),
+    ("stardew valley.exe", "Stardew Valley"),
+    ("among us.exe", "Among Us"),
+    ("fallguys_client_game.exe", "Fall Guys"),
+    ("hollow_knight.exe", "Hollow Knight"),
+    ("osu!.exe", "osu!"),
+    ("geometrydash.exe", "Geometry Dash"),
+    ("forzahorizon5.exe", "Forza Horizon 5"),
+    ("eurotrucks2.exe", "Euro Truck Simulator 2"),
+    ("factorio.exe", "Factorio"),
+    ("warframe.x64.exe", "Warframe"),
+    ("pathofexile_x64.exe", "Path of Exile"),
+    ("wow.exe", "World of Warcraft"),
+    ("hearthstone.exe", "Hearthstone"),
+    ("diablo iv.exe", "Diablo IV"),
+    ("ts4_x64.exe", "The Sims 4"),
+    ("brawlhalla.exe", "Brawlhalla"),
+    ("fc25.exe", "EA Sports FC 25"),
+    ("fc26.exe", "EA Sports FC 26"),
+];
+
+/// The name of a known game, by executable file name in any case.
+pub fn known_game(exe: &str) -> Option<&'static str> {
+    let exe = exe.trim().to_lowercase();
+    KNOWN_GAMES
+        .iter()
+        .find(|(file, _)| *file == exe)
+        .map(|(_, name)| *name)
+}
 
 /// A known non-game executable (browser, player, launcher, office app...), by file name in any
 /// case. These never count as play time, whatever the "every fullscreen app" setting says.

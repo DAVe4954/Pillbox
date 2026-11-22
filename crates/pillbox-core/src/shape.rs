@@ -192,8 +192,8 @@ pub const MUSIC_TEXT: f32 = 0.40;
 /// The resting pill is never narrower than this (it still reads as a pill with the clock).
 pub const RESTING_MIN_W: f32 = 88.0;
 /// A playing song's pill: at least this wide with a title, at most this wide in any case.
-pub const MUSIC_MIN_W: f32 = 230.0;
-pub const MUSIC_MAX_W: f32 = 480.0;
+pub const MUSIC_MIN_W: f32 = 196.0;
+pub const MUSIC_MAX_W: f32 = 360.0;
 /// The music pill's six bars (3 px each, 2 px apart), in DIPs.
 pub const MUSIC_BARS_W: f32 = 6.0 * 3.0 + 5.0 * 2.0;
 

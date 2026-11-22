@@ -46,6 +46,39 @@ pub struct SysView {
     pub net: Option<(String, Option<String>, &'static str)>,
 }
 
+/// One hour of today on the expanded Weather card, ready to draw.
+#[derive(Debug, Clone, Default)]
+pub struct HourView {
+    /// "12:00" or "12 PM".
+    pub time: String,
+    /// "6°".
+    pub temp: String,
+    /// The temperature in the shown unit, for the curve.
+    pub value: f32,
+    /// The weather as one picture.
+    pub glyph: &'static str,
+    /// Earlier today (drawn dimmer).
+    pub past: bool,
+    /// The slot the current hour falls in.
+    pub now: bool,
+}
+
+/// One day of the expanded Weather card, texts ready to draw.
+#[derive(Debug, Clone, Default)]
+pub struct ForecastView {
+    /// "Mon".
+    pub day: String,
+    /// The weather as one picture: "🌧".
+    pub glyph: &'static str,
+    /// "Rain".
+    pub name: &'static str,
+    /// "9°" and "3°" (empty when missing).
+    pub high: String,
+    pub low: String,
+    /// "40%" chance of rain or snow; `None` when unknown.
+    pub rain: Option<String>,
+}
+
 /// One day of the expanded Play time card, texts ready to draw.
 #[derive(Debug, Clone, Default)]
 pub struct PlayDayView {
@@ -72,6 +105,10 @@ pub struct WidgetData {
     pub weather_detail: Option<String>,
     /// The detailed weather look: condition, range, wind (empty for the minimal look).
     pub weather_lines: Vec<String>,
+    /// The next days, for the expanded detailed look (empty for the minimal look).
+    pub forecast: Vec<ForecastView>,
+    /// Today through the day (expanded detailed look only; may be empty).
+    pub today: Vec<HourView>,
     /// Play time: today, the last 7 days, the most played game this week, the game now.
     pub play_today: String,
     pub play_week: String,
@@ -136,6 +173,14 @@ pub fn is_wide_on_home(kind: WidgetKind, w: &WidgetsUi<'_>) -> bool {
 pub fn tile_height(kind: WidgetKind, w: &WidgetsUi<'_>) -> f32 {
     if kind == WidgetKind::PlayTime && w.play_open && !w.data.play_days.is_empty() {
         PLAY_LIST_TOP + play_rows(w.data, w.play_day) as f32 * PLAY_ROW + 8.0
+    } else if kind == WidgetKind::Weather && weather_open(w) {
+        TILE_H
+            + FORECAST_H
+            + if w.data.today.is_empty() {
+                0.0
+            } else {
+                TODAY_H
+            }
     } else {
         TILE_H
     }
@@ -143,6 +188,15 @@ pub fn tile_height(kind: WidgetKind, w: &WidgetsUi<'_>) -> f32 {
 
 /// A normal tile's height, logical px.
 pub const TILE_H: f32 = 88.0;
+/// The row of days the expanded Weather card adds below the normal tile, logical px.
+const FORECAST_H: f32 = 92.0;
+/// Today's row of temperatures, between the current weather and the days ahead, logical px.
+const TODAY_H: f32 = 70.0;
+
+/// The detailed Weather card is expanded and has days to show.
+fn weather_open(w: &WidgetsUi<'_>) -> bool {
+    w.weather_open && !w.data.weather_lines.is_empty() && !w.data.forecast.is_empty()
+}
 /// Where the game list starts in the expanded Play time card, and the height of one game.
 const PLAY_LIST_TOP: f32 = 58.0;
 const PLAY_ROW: f32 = 26.0;
@@ -349,7 +403,33 @@ pub fn paint_tile(
             title(f, cx, rect, "\u{E753}", "Weather");
             match (&d.weather, d.weather_note) {
                 (Some(w), _) if !d.weather_lines.is_empty() => {
-                    // Detailed look: temperature on the left, a few lines on the right.
+                    // Detailed look: temperature on the left, a few lines on the right. With
+                    // a forecast, the whole tile opens and folds the next five days below.
+                    let open = weather_open(&cx.ui.widgets);
+                    let b = if open { t + TILE_H * k } else { b };
+                    if !d.forecast.is_empty() {
+                        hits.push(Hit {
+                            rect,
+                            action: Action::Widget(WidgetAction::WeatherToggle),
+                        });
+                        f.text(
+                            if open { "\u{E70E}" } else { "\u{E70D}" },
+                            r - 48.0 * k,
+                            t + 4.0 * k,
+                            r - 26.0 * k,
+                            t + 24.0 * k,
+                            icon(10.0 * k, cx.dim()),
+                        );
+                    }
+                    if open {
+                        let days_top = if d.today.is_empty() {
+                            b
+                        } else {
+                            paint_today(f, cx, (l, b, r, b + TODAY_H * k));
+                            b + TODAY_H * k
+                        };
+                        paint_forecast(f, cx, (l, days_top, r, rect.3));
+                    }
                     let mid = l + (r - l) * 0.42;
                     f.text(
                         w,
@@ -855,6 +935,173 @@ pub fn paint_tile(
             cx.dim(),
             Action::Widget(WidgetAction::PopOut(index)),
             hits,
+        );
+    }
+}
+
+/// Today on the expanded Weather card (no caption: the times say it): the temperature at a few
+/// hours, joined by a curve, with
+/// the time and a picture of the weather under each point. Earlier hours are dimmer; the
+/// current one is marked in the accent colour.
+fn paint_today(f: &mut Frame<'_>, cx: &Ctx<'_>, (l, t, r, b): Rect) {
+    let k = cx.k;
+    let hours = &cx.ui.widgets.data.today;
+    if hours.is_empty() {
+        return;
+    }
+    f.fill_pill(
+        &rounded((l + 10.0 * k, t, r - 10.0 * k, t + 1.0 * k), 0.5 * k),
+        cx.wash(0.12),
+    );
+    let n = hours.len() as f32;
+    let (inner_l, inner_r) = (l + 14.0 * k, r - 14.0 * k);
+    let col_w = (inner_r - inner_l) / n;
+    let x_of = |i: usize| inner_l + col_w * (i as f32 + 0.5);
+    // The curve band: the warmest hour at its top, the coldest at its bottom.
+    let (band_t, band_b) = (t + 24.0 * k, t + 38.0 * k);
+    let (lo, hi) = hours.iter().fold((f32::MAX, f32::MIN), |(lo, hi), h| {
+        (lo.min(h.value), hi.max(h.value))
+    });
+    let span = (hi - lo).max(1.0);
+    let y_of = |v: f32| band_b - (v - lo) / span * (band_b - band_t);
+    for i in 1..hours.len() {
+        let (a, z) = (&hours[i - 1], &hours[i]);
+        let color = if z.past {
+            cx.wash(0.25)
+        } else {
+            cx.accent().with_alpha(0.7 * cx.alpha)
+        };
+        f.line(
+            x_of(i - 1),
+            y_of(a.value),
+            x_of(i),
+            y_of(z.value),
+            color,
+            2.0 * k,
+        );
+    }
+    for (i, h) in hours.iter().enumerate() {
+        let (x, y) = (x_of(i), y_of(h.value));
+        let (text, dim) = if h.past {
+            (cx.dim(), cx.dim().with_alpha(0.6 * cx.alpha))
+        } else {
+            (cx.text(), cx.dim())
+        };
+        let dot = if h.now { 4.0 * k } else { 2.5 * k };
+        let dot_color = if h.now {
+            cx.accent().with_alpha(cx.alpha)
+        } else if h.past {
+            cx.wash(0.35)
+        } else {
+            cx.text()
+        };
+        f.fill_ellipse(x, y, dot, dot, dot_color);
+        // The temperature above its point; the weather and the time under the band.
+        f.text(
+            &h.temp,
+            x - col_w / 2.0,
+            y - 20.0 * k,
+            x + col_w / 2.0,
+            y - 5.0 * k,
+            label(
+                12.0 * k,
+                h.now,
+                if h.now { cx.accent() } else { text },
+                Align::Center,
+            ),
+        );
+        f.text(
+            &format!("{} {}", h.glyph, h.time),
+            x - col_w / 2.0,
+            band_b + 10.0 * k,
+            x + col_w / 2.0,
+            (band_b + 26.0 * k).min(b),
+            label(
+                10.5 * k,
+                h.now,
+                if h.now { cx.text() } else { dim },
+                Align::Center,
+            ),
+        );
+    }
+}
+
+/// The expanded Weather card's lower part: one column per day, each with the weekday, a
+/// picture of the weather, the high and the low, and the chance of rain.
+fn paint_forecast(f: &mut Frame<'_>, cx: &Ctx<'_>, (l, t, r, b): Rect) {
+    let k = cx.k;
+    let days = &cx.ui.widgets.data.forecast;
+    if days.is_empty() {
+        return;
+    }
+    // A hairline between today and the days ahead.
+    f.fill_pill(
+        &rounded((l + 10.0 * k, t, r - 10.0 * k, t + 1.0 * k), 0.5 * k),
+        cx.wash(0.12),
+    );
+    let gap = 4.0 * k;
+    let inner_l = l + 8.0 * k;
+    let n = days.len() as f32;
+    let col_w = (r - 8.0 * k - inner_l - gap * (n - 1.0)) / n;
+    let top = t + 8.0 * k;
+    for (i, day) in days.iter().enumerate() {
+        let cl = inner_l + i as f32 * (col_w + gap);
+        let cr = cl + col_w;
+        // Each day on its own soft panel.
+        f.fill_pill(
+            &rounded((cl, top, cr, b - 8.0 * k), 10.0 * k),
+            cx.wash(0.06),
+        );
+        let line = |y: f32, h: f32| (y, y + h);
+        let (y0, y1) = line(top + 4.0 * k, 15.0 * k);
+        f.text(
+            &day.day,
+            cl,
+            y0,
+            cr,
+            y1,
+            label(11.0 * k, true, cx.dim(), Align::Center),
+        );
+        let (y0, y1) = line(top + 19.0 * k, 24.0 * k);
+        f.text(
+            day.glyph,
+            cl,
+            y0,
+            cr,
+            y1,
+            label(19.0 * k, false, cx.text(), Align::Center),
+        );
+        // High in full colour, low dimmed, on one line.
+        let (y0, y1) = line(top + 43.0 * k, 17.0 * k);
+        let mid = (cl + cr) / 2.0;
+        f.text(
+            &day.high,
+            cl,
+            y0,
+            mid - 2.0 * k,
+            y1,
+            label(13.0 * k, true, cx.text(), Align::Right),
+        );
+        f.text(
+            &day.low,
+            mid + 2.0 * k,
+            y0,
+            cr,
+            y1,
+            label(12.0 * k, false, cx.dim(), Align::Left),
+        );
+        let (y0, y1) = line(top + 60.0 * k, 14.0 * k);
+        let rain = match &day.rain {
+            Some(p) => format!("💧 {p}"),
+            None => day.name.to_string(),
+        };
+        f.text(
+            &rain,
+            cl + 2.0 * k,
+            y0,
+            cr - 2.0 * k,
+            y1,
+            label(10.0 * k, false, cx.dim(), Align::Center),
         );
     }
 }

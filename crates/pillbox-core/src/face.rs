@@ -128,12 +128,15 @@ pub struct WeatherNow {
     pub low_c: Option<f32>,
 }
 
-/// The Open-Meteo request for current conditions and today's range. No API key, no account.
+/// The Open-Meteo request for current conditions, today's range and hours, and the next five
+/// days. No API key, no account.
 pub fn open_meteo_url(latitude: f32, longitude: f32) -> String {
     format!(
         "https://api.open-meteo.com/v1/forecast?latitude={latitude:.3}&longitude={longitude:.3}\
          &current=temperature_2m,weather_code,is_day,apparent_temperature,relative_humidity_2m,\
-         wind_speed_10m&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto"
+         wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,weather_code,\
+         precipitation_probability_max&hourly=temperature_2m,weather_code&forecast_days=6\
+         &timezone=auto"
     )
 }
 
@@ -244,6 +247,146 @@ pub fn parse_open_meteo(json: &str) -> Option<WeatherNow> {
         high_c: first(&r.daily.temperature_2m_max),
         low_c: first(&r.daily.temperature_2m_min),
     })
+}
+
+/// One day of the forecast (the detailed Weather card, expanded).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DayForecast {
+    pub date: crate::calendar::Date,
+    /// WMO weather code.
+    pub code: u32,
+    pub high_c: Option<f32>,
+    pub low_c: Option<f32>,
+    /// The highest chance of rain or snow that day, percent.
+    pub rain_pct: Option<f32>,
+}
+
+/// The days after today in an Open-Meteo reply (at most `days`), skipping any day whose date
+/// cannot be read. Empty for anything unexpected.
+pub fn parse_forecast(json: &str, days: usize) -> Vec<DayForecast> {
+    #[derive(Deserialize, Default)]
+    struct Daily {
+        #[serde(default)]
+        time: Vec<String>,
+        #[serde(default)]
+        weather_code: Vec<Option<u32>>,
+        #[serde(default)]
+        temperature_2m_max: Vec<Option<f32>>,
+        #[serde(default)]
+        temperature_2m_min: Vec<Option<f32>>,
+        #[serde(default)]
+        precipitation_probability_max: Vec<Option<f32>>,
+    }
+    #[derive(Deserialize)]
+    struct Response {
+        #[serde(default)]
+        daily: Daily,
+    }
+    let Ok(r) = serde_json::from_str::<Response>(json) else {
+        return Vec::new();
+    };
+    let d = r.daily;
+    let at = |v: &[Option<f32>], i: usize| v.get(i).copied().flatten().filter(|x| x.is_finite());
+    d.time
+        .iter()
+        .enumerate()
+        // The first day is today, already on the card.
+        .skip(1)
+        .filter_map(|(i, text)| {
+            let date = parse_iso_date(text)?;
+            Some(DayForecast {
+                date,
+                code: d.weather_code.get(i).copied().flatten().unwrap_or(3),
+                high_c: at(&d.temperature_2m_max, i),
+                low_c: at(&d.temperature_2m_min, i),
+                rain_pct: at(&d.precipitation_probability_max, i).map(|p| p.clamp(0.0, 100.0)),
+            })
+        })
+        .take(days)
+        .collect()
+}
+
+/// One hour of today's forecast (the expanded Weather card's "Today" row).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HourTemp {
+    /// 0..=23, local time at the place.
+    pub hour: u8,
+    pub temp_c: f32,
+    /// WMO weather code.
+    pub code: u32,
+}
+
+/// The hours of the reply's first day (today, in the place's own time zone), in order. Hours
+/// without a temperature are left out; empty for anything unexpected.
+pub fn parse_today_hours(json: &str) -> Vec<HourTemp> {
+    #[derive(Deserialize, Default)]
+    struct Hourly {
+        #[serde(default)]
+        time: Vec<String>,
+        #[serde(default)]
+        temperature_2m: Vec<Option<f32>>,
+        #[serde(default)]
+        weather_code: Vec<Option<u32>>,
+    }
+    #[derive(Deserialize)]
+    struct Response {
+        #[serde(default)]
+        hourly: Hourly,
+    }
+    let Ok(r) = serde_json::from_str::<Response>(json) else {
+        return Vec::new();
+    };
+    let h = r.hourly;
+    // "2026-11-22T06:00": the date part, and the hour.
+    let split = |t: &str| -> Option<(String, u8)> {
+        let (date, time) = t.split_once('T')?;
+        let hour = time.get(..2)?.parse::<u8>().ok().filter(|h| *h < 24)?;
+        Some((date.to_string(), hour))
+    };
+    let Some((today, _)) = h.time.first().and_then(|t| split(t)) else {
+        return Vec::new();
+    };
+    h.time
+        .iter()
+        .enumerate()
+        .filter_map(|(i, t)| {
+            let (date, hour) = split(t)?;
+            if date != today {
+                return None;
+            }
+            let temp_c = h
+                .temperature_2m
+                .get(i)
+                .copied()
+                .flatten()
+                .filter(|v| v.is_finite())?;
+            let code = h.weather_code.get(i).copied().flatten().unwrap_or(3);
+            Some(HourTemp { hour, temp_c, code })
+        })
+        .collect()
+}
+
+/// The hours the "Today" row shows: every three hours from 6:00 to 21:00, those the forecast has.
+pub fn day_hours(hours: &[HourTemp]) -> Vec<HourTemp> {
+    [6u8, 9, 12, 15, 18, 21]
+        .iter()
+        .filter_map(|want| hours.iter().find(|h| h.hour == *want).copied())
+        .collect()
+}
+
+/// "2026-11-23" as a date; `None` for anything else.
+fn parse_iso_date(text: &str) -> Option<crate::calendar::Date> {
+    let mut parts = text.trim().splitn(3, '-');
+    let year = parts.next()?.parse().ok()?;
+    let month = parts.next()?.parse().ok()?;
+    let day = parts.next()?.parse().ok()?;
+    let date = crate::calendar::Date { year, month, day };
+    date.valid().then_some(date)
+}
+
+/// The short weekday name of a date: "Mon".
+pub fn short_weekday(date: crate::calendar::Date) -> &'static str {
+    WEEKDAYS.get(date.weekday() as usize).copied().unwrap_or("")
 }
 
 /// A short name for a WMO weather code.
@@ -373,6 +516,71 @@ pub fn pet_pixels(blink: bool) -> impl Iterator<Item = (usize, usize, PetPixel)>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn todays_hours_are_read_and_thinned_to_every_three() {
+        let mut time = Vec::new();
+        let mut temp = Vec::new();
+        for day in ["2026-11-22", "2026-11-23"] {
+            for hour in 0..24 {
+                time.push(format!("\"{day}T{hour:02}:00\""));
+                temp.push(if day == "2026-11-22" && hour == 9 {
+                    "null".to_string()
+                } else {
+                    format!("{}.5", hour)
+                });
+            }
+        }
+        let json = format!(
+            r#"{{ "hourly": {{ "time": [{}], "temperature_2m": [{}], "weather_code": [61] }} }}"#,
+            time.join(","),
+            temp.join(",")
+        );
+        let hours = parse_today_hours(&json);
+        // Only the first day, and not the hour without a temperature.
+        assert_eq!(hours.len(), 23);
+        assert_eq!(hours[0].code, 61);
+        assert_eq!(hours[1].code, 3);
+        let shown = day_hours(&hours);
+        let at: Vec<u8> = shown.iter().map(|h| h.hour).collect();
+        assert_eq!(at, [6, 12, 15, 18, 21]);
+        assert_eq!(shown[1].temp_c, 12.5);
+        assert!(parse_today_hours("nope").is_empty());
+        assert!(parse_today_hours(r#"{ "hourly": { "time": ["soon"] } }"#).is_empty());
+    }
+
+    #[test]
+    fn the_forecast_skips_today_and_reads_five_days() {
+        let json = r#"{ "current": { "temperature_2m": 5.0, "weather_code": 3, "is_day": 1 },
+            "daily": {
+              "time": ["2026-11-22","2026-11-23","2026-11-24","2026-11-25","2026-11-26","2026-11-27"],
+              "weather_code": [3, 61, null, 0, 71, 95],
+              "temperature_2m_max": [6.0, 8.5, 7.0, null, 1.0, 12.0],
+              "temperature_2m_min": [1.0, 2.0, 3.0, -2.5, -4.0, 6.0],
+              "precipitation_probability_max": [10, 80, 150, 0, null, 55] } }"#;
+        let days = parse_forecast(json, 5);
+        assert_eq!(days.len(), 5);
+        // 2026-11-23 is a Monday.
+        assert_eq!(short_weekday(days[0].date), "Mon");
+        assert_eq!(days[0].code, 61);
+        assert_eq!(days[0].high_c, Some(8.5));
+        assert_eq!(days[0].rain_pct, Some(80.0));
+        // A missing code reads as cloudy; a chance over 100 is clamped.
+        assert_eq!(days[1].code, 3);
+        assert_eq!(days[1].rain_pct, Some(100.0));
+        assert_eq!(days[2].high_c, None);
+        assert_eq!(days[2].low_c, Some(-2.5));
+        assert_eq!(days[3].rain_pct, None);
+        assert_eq!(short_weekday(days[4].date), "Fri");
+        // Fewer wanted, fewer given; nonsense gives none.
+        assert_eq!(parse_forecast(json, 2).len(), 2);
+        assert!(parse_forecast("not json", 5).is_empty());
+        assert!(
+            parse_forecast(r#"{ "daily": { "time": ["today", "2026-13-40"] } }"#, 5).is_empty()
+        );
+        // The current reading still parses from the same reply.
+        assert!(parse_open_meteo(json).is_some());
+    }
 
     fn at(hour: u8, minute: u8, second: u8) -> LocalTime {
         LocalTime {
@@ -585,6 +793,9 @@ mod tests {
             "https://api.open-meteo.com/v1/forecast?latitude=51.507&longitude=-0.128"
         ));
         assert!(!url.contains("key"));
+        // One unbroken address: a stray space or line break makes every request fail.
+        assert!(!url.contains(char::is_whitespace), "{url}");
+        assert!(url.contains("&hourly=temperature_2m") && url.ends_with("&timezone=auto"));
     }
 
     #[test]

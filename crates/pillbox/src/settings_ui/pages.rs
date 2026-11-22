@@ -6,16 +6,16 @@ use eframe::egui::{self, Align2, Color32, CornerRadius, Pos2, Rect, Stroke, Stro
 use pillbox_core::{
     settings::{
         AppRule, AppTheme, Appearance, CLOCK_SIZE_MAX, CLOCK_SIZE_MIN, ChatSource, ClockColor,
-        EXPIRE_CHOICES, FADE_OPACITY_MIN, FADE_STOPS_MAX, FADE_STOPS_MIN, FadeStop, GameBehavior,
-        LAUNCH_SLOTS, LaunchSlot, MusicReveal, NoteMode, NoteRule, PillClock, ProgressStyle,
-        ReopenTab, RestingFace, RuleBehavior, SIZE_MAX, SIZE_MIN, Side, Snippet, SourceMode,
-        StripBackground, Style, Surface, Visualizer, WeatherLook, WidgetKind,
+        FADE_OPACITY_MIN, FADE_STOPS_MAX, FADE_STOPS_MIN, FadeStop, GameBehavior, LAUNCH_SLOTS,
+        LaunchSlot, MusicReveal, NoteMode, NoteRule, PillClock, ProgressStyle, ReopenTab,
+        RestingFace, RuleBehavior, SIZE_MAX, SIZE_MIN, Side, Snippet, SourceMode, StripBackground,
+        Style, Surface, Visualizer, WeatherLook, WidgetKind,
     },
     theme::{self, Theme},
 };
 
 use super::{Page, SettingsApp, kit::*};
-use crate::platform::{foreground, media, system};
+use crate::platform::{foreground, media, sensors, system};
 
 /// Accent colours offered as one-click swatches (any colour can still be picked).
 const ACCENTS: [&str; 8] = [
@@ -40,6 +40,7 @@ impl SettingsApp {
     pub(super) fn show_page(&mut self, ui: &mut Ui, page: Page, q: &str) {
         match page {
             Page::General => self.general(ui, q),
+            Page::ClosedPill => self.closed_pill(ui, q),
             Page::Appearance => self.appearance(ui, q),
             Page::Music => self.music(ui, q),
             Page::Widgets => self.widgets(ui, q),
@@ -52,221 +53,21 @@ impl SettingsApp {
         }
     }
 
-    // ---- General ------------------------------------------------------------------------------
+    // ---- Closed pill --------------------------------------------------------------------------
 
-    fn general(&mut self, ui: &mut Ui, q: &str) {
-        let page = Page::General.title();
-        let l = &mut self.draft.layout;
-        let mut s = Section::new(ui, "Pillbox", page, q);
-        s.row(
-            icon::FULLSCREEN,
-            "Shape",
-            "A floating pill, or a notch joined to the screen edge",
-            "style notch pill pillbox",
-            |ui| {
-                segmented(
-                    ui,
-                    &mut l.style,
-                    &[(Style::Pill, "Pill"), (Style::Notch, "Notch")],
-                );
-            },
-        );
-        s.row(
-            icon::PIN,
-            "Screen edge",
-            "Where Pillbox sits",
-            "side top left right position",
-            |ui| {
-                segmented(
-                    ui,
-                    &mut l.side,
-                    &[
-                        (Side::Top, "Top"),
-                        (Side::Left, "Left"),
-                        (Side::Right, "Right"),
-                    ],
-                );
-            },
-        );
-        let monitors = &self.monitors;
-        s.row(
-            icon::MONITOR,
-            "Display",
-            "Which screen Pillbox appears on",
-            "monitor screen",
-            |ui| {
-                let mut options = vec![("primary".to_string(), "Primary display".to_string())];
-                for m in monitors {
-                    let name = m.name.trim_start_matches(r"\\.\").to_string();
-                    let primary = if m.primary { ", primary" } else { "" };
-                    options.push((
-                        m.name.clone(),
-                        format!("{name} ({}×{}{primary})", m.rect.width(), m.rect.height()),
-                    ));
-                }
-                if !options
-                    .iter()
-                    .any(|(v, _)| v.eq_ignore_ascii_case(&l.monitor))
-                {
-                    options.push((l.monitor.clone(), format!("{} (not connected)", l.monitor)));
-                }
-                dropdown(ui, "monitor", &mut l.monitor, &options, 220.0);
-            },
-        );
-        let notch = l.style == Style::Notch;
-        s.row(
-            icon::SPEED,
-            "Distance from the edge",
-            if notch {
-                "The notch always touches the edge"
-            } else {
-                "Move the pill closer to or farther from the edge"
-            },
-            "gap margin offset",
-            |ui| {
-                slider_enabled(
-                    ui,
-                    &mut l.distance,
-                    0.0..=120.0,
-                    1.0,
-                    |v| format!("{v:.0} px"),
-                    !notch,
-                );
-            },
-        );
-        s.row(
-            icon::FULLSCREEN,
-            "Size",
-            "Scale the whole Pillbox, closed and open, text included",
-            "scale bigger smaller zoom",
-            |ui| {
-                slider(ui, &mut l.size, SIZE_MIN..=SIZE_MAX, 0.05, |v| {
-                    format!("{:.0}%", v * 100.0)
-                });
-            },
-        );
-        s.row(
-            icon::EYE,
-            "Hide until hover",
-            "Slide off screen until the pointer touches the edge",
-            "hidden auto hide",
-            |ui| {
-                toggle(ui, &mut l.hidden_until_hover);
-            },
-        );
-        s.end();
+    /// The Closed pill page: its resting face, then everything else that can appear on it.
+    fn closed_pill(&mut self, ui: &mut Ui, q: &str) {
+        self.resting_face(ui, q);
+        self.on_the_pill(ui, q);
+    }
 
-        // What brings a hidden Pillbox into view; it hides again when the reason ends.
-        let hidden = self.draft.layout.hidden_until_hover;
-        let r = &mut self.draft.layout.reveal;
-        let needs = "Turn on Hide until hover first";
-        let mut s = Section::new(ui, "Show a hidden Pillbox when", page, q);
-        s.row(
-            icon::MUSIC,
-            "Music plays",
-            if hidden {
-                "Keep it in view while a song plays, or only for a moment when a song changes"
-            } else {
-                needs
-            },
-            "song spotify show reveal hidden",
-            |ui| {
-                segmented_enabled(
-                    ui,
-                    &mut r.music,
-                    &[
-                        (MusicReveal::Never, "Never"),
-                        (MusicReveal::WhilePlaying, "While playing"),
-                        (MusicReveal::OnSongChange, "New song"),
-                    ],
-                    hidden,
-                );
-            },
-        );
-        let timed = hidden && r.music == MusicReveal::OnSongChange;
-        s.row(
-            icon::TIMER,
-            "A new song stays in view for",
-            if timed {
-                "Then it hides again"
-            } else {
-                "Used with Music plays: New song"
-            },
-            "seconds song change",
-            |ui| {
-                let mut v = r.song_seconds as f32;
-                if slider_enabled(ui, &mut v, 2.0..=30.0, 1.0, |v| format!("{v:.0} s"), timed) {
-                    r.song_seconds = v.round() as u32;
-                }
-            },
-        );
-        s.row(
-            icon::BELL,
-            "A notification arrives",
-            if hidden {
-                "Windows notifications mirrored on Pillbox"
-            } else {
-                needs
-            },
-            "toast alert stack",
-            |ui| {
-                toggle_enabled(ui, &mut r.notifications, hidden);
-            },
-        );
-        s.row(
-            icon::BOLT,
-            "An agent or script flashes",
-            if hidden {
-                "Claude Code, Codex and pillboxctl flashes"
-            } else {
-                needs
-            },
-            "flash agent claude codex pillboxctl",
-            |ui| {
-                toggle_enabled(ui, &mut r.flashes, hidden);
-            },
-        );
-        s.row(
-            icon::MIC,
-            "A call starts",
-            if hidden {
-                "An app uses the microphone"
-            } else {
-                needs
-            },
-            "meeting microphone timer",
-            |ui| {
-                toggle_enabled(ui, &mut r.calls, hidden);
-            },
-        );
-        s.row(
-            icon::CLOCK,
-            "A reminder rings",
-            if hidden { "Until you answer it" } else { needs },
-            "alarm timer",
-            |ui| {
-                toggle_enabled(ui, &mut r.reminders, hidden);
-            },
-        );
-        s.row(
-            icon::LOCK,
-            "A short notice shows",
-            if hidden {
-                "Lock keys, microphone muted, screenshot saved, colour copied"
-            } else {
-                needs
-            },
-            "caps lock num lock screenshot color picker",
-            |ui| {
-                toggle_enabled(ui, &mut r.notices, hidden);
-            },
-        );
-        s.end();
-
+    /// What the closed pill shows when nothing else is going on, and how its text looks.
+    fn resting_face(&mut self, ui: &mut Ui, q: &str) {
+        let page = Page::ClosedPill.title();
         let b = &mut self.draft.behavior;
         let face = &mut self.draft.appearance.resting_face;
         let ck = &mut self.draft.appearance.clock;
-        let mut s = Section::new(ui, "Closed pill", page, q);
+        let mut s = Section::new(ui, "Resting face", page, q);
         s.row(
             icon::HOME,
             "Shows",
@@ -394,7 +195,379 @@ impl SettingsApp {
             },
         );
         s.end();
+    }
 
+    // ---- General ------------------------------------------------------------------------------
+
+    /// Every switch for what the closed pill shows, in one place. The same settings also appear
+    /// on their own pages (Music, Notifications); both edit the same values.
+    fn on_the_pill(&mut self, ui: &mut Ui, q: &str) {
+        let page = Page::ClosedPill.title();
+        // Which apps hold the microphone now, read again every two seconds while shown.
+        if self
+            .mic_read
+            .is_none_or(|at| at.elapsed() > std::time::Duration::from_secs(2))
+        {
+            self.mic_apps = sensors::read().mic;
+            self.mic_read = Some(std::time::Instant::now());
+        }
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs(2));
+
+        let m = &mut self.draft.music;
+        let c = &mut self.draft.calls;
+        let b = &mut self.draft.behavior;
+        let pop = &mut self.draft.popups;
+        let mut s = Section::new(ui, "What else it shows", page, q);
+        s.row(
+            icon::MUSIC,
+            "Playing song",
+            "The cover, title and bars while music plays",
+            "music song spotify youtube now playing show hide",
+            |ui| {
+                toggle(ui, &mut m.on_pill);
+            },
+        );
+        let song = m.on_pill;
+        s.row(
+            icon::TEXT,
+            "Song title",
+            if song {
+                "The title next to the cover; off shows only the cover and bars"
+            } else {
+                "Turn on Playing song first"
+            },
+            "music title name",
+            |ui| {
+                toggle_enabled(ui, &mut m.title_in_pill, song);
+            },
+        );
+        s.row(
+            icon::TIMER,
+            "Call timer",
+            "A timer while an app uses the microphone (a call, a voice chat)",
+            "call meeting zoom teams discord voice microphone",
+            |ui| {
+                toggle(ui, &mut c.call_timer);
+            },
+        );
+        let timer = c.call_timer;
+        s.row(
+            icon::EQUALIZER,
+            "Music before calls",
+            if !timer {
+                "Turn on Call timer first"
+            } else if song {
+                "While music plays the song stays; the timer shows when it stops"
+            } else {
+                "Used when Playing song is on"
+            },
+            "discord voice chat priority music call",
+            |ui| {
+                toggle_enabled(ui, &mut c.music_first, timer && song);
+            },
+        );
+        s.row(
+            icon::MIC,
+            "Microphone and camera dot",
+            "Orange = microphone, green = camera",
+            "privacy indicator sensor dot",
+            |ui| {
+                toggle(ui, &mut c.sensor_dot);
+            },
+        );
+        let using: Vec<String> = self
+            .mic_apps
+            .iter()
+            .filter(|app| !c.ignore_apps.iter().any(|i| app.contains(i.as_str())))
+            .cloned()
+            .collect();
+        s.block(
+            icon::MIC,
+            "Using the microphone now",
+            "Ignore an app to never show a timer or dot for it",
+            "discord ignore microphone app exclude",
+            |ui| {
+                if using.is_empty() {
+                    note(ui, "No app is using the microphone right now.");
+                }
+                for app in &using {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new(app.as_str()).font(regular(13.5)));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if button(ui, icon::CANCEL, "Ignore").clicked()
+                                && !c.ignore_apps.contains(app)
+                            {
+                                c.ignore_apps.push(app.clone());
+                            }
+                        });
+                    });
+                }
+                if !c.ignore_apps.is_empty() {
+                    note(
+                        ui,
+                        &format!(
+                            "Ignored: {}. Remove them in Notifications > Calls.",
+                            c.ignore_apps.join(", ")
+                        ),
+                    );
+                }
+            },
+        );
+        s.row(
+            icon::LOCK,
+            "Caps, Num and Scroll Lock",
+            "A short notice when one changes",
+            "lock keys keyboard notice",
+            |ui| {
+                toggle(ui, &mut pop.lock_keys);
+            },
+        );
+        s.row(
+            icon::POWER,
+            "Start-up greeting",
+            "Slides in and says \"Pillbox is running\" after it starts, even when hidden",
+            "startup greeting intro running",
+            |ui| {
+                toggle(ui, &mut b.start_greeting);
+            },
+        );
+        s.end();
+    }
+
+    fn general(&mut self, ui: &mut Ui, q: &str) {
+        let page = Page::General.title();
+        let mut s = Section::new(ui, "Startup", page, q);
+        let mut autostart = self.autostart;
+        let mut failed = None;
+        s.row(
+            icon::POWER,
+            "Start with Windows",
+            "Open Pillbox when you sign in",
+            "autostart boot login",
+            |ui| {
+                if toggle(ui, &mut autostart)
+                    && let Err(e) = system::set_autostart(autostart)
+                {
+                    failed = Some(format!("{e:#}"));
+                }
+            },
+        );
+        s.end();
+        if let Some(e) = failed {
+            self.say(format!("Start with Windows: {e}"), false);
+        } else {
+            self.autostart = autostart;
+        }
+
+        let l = &mut self.draft.layout;
+        let mut s = Section::new(ui, "Position and size", page, q);
+        s.row(
+            icon::FULLSCREEN,
+            "Shape",
+            "A floating pill, or a notch joined to the screen edge",
+            "style notch pill pillbox",
+            |ui| {
+                segmented(
+                    ui,
+                    &mut l.style,
+                    &[(Style::Pill, "Pill"), (Style::Notch, "Notch")],
+                );
+            },
+        );
+        s.row(
+            icon::PIN,
+            "Screen edge",
+            "Where Pillbox sits",
+            "side top left right position",
+            |ui| {
+                segmented(
+                    ui,
+                    &mut l.side,
+                    &[
+                        (Side::Top, "Top"),
+                        (Side::Left, "Left"),
+                        (Side::Right, "Right"),
+                    ],
+                );
+            },
+        );
+        let monitors = &self.monitors;
+        s.row(
+            icon::MONITOR,
+            "Display",
+            "Which screen Pillbox appears on",
+            "monitor screen",
+            |ui| {
+                let mut options = vec![("primary".to_string(), "Primary display".to_string())];
+                for m in monitors {
+                    let name = m.name.trim_start_matches(r"\\.\").to_string();
+                    let primary = if m.primary { ", primary" } else { "" };
+                    options.push((
+                        m.name.clone(),
+                        format!("{name} ({}×{}{primary})", m.rect.width(), m.rect.height()),
+                    ));
+                }
+                if !options
+                    .iter()
+                    .any(|(v, _)| v.eq_ignore_ascii_case(&l.monitor))
+                {
+                    options.push((l.monitor.clone(), format!("{} (not connected)", l.monitor)));
+                }
+                dropdown(ui, "monitor", &mut l.monitor, &options, 220.0);
+            },
+        );
+        let notch = l.style == Style::Notch;
+        s.row(
+            icon::SPEED,
+            "Distance from the edge",
+            if notch {
+                "The notch always touches the edge"
+            } else {
+                "Move the pill closer to or farther from the edge"
+            },
+            "gap margin offset",
+            |ui| {
+                slider_enabled(
+                    ui,
+                    &mut l.distance,
+                    0.0..=120.0,
+                    1.0,
+                    |v| format!("{v:.0} px"),
+                    !notch,
+                );
+            },
+        );
+        s.row(
+            icon::FULLSCREEN,
+            "Size",
+            "Scale the whole Pillbox, closed and open, text included",
+            "scale bigger smaller zoom",
+            |ui| {
+                slider(ui, &mut l.size, SIZE_MIN..=SIZE_MAX, 0.05, |v| {
+                    format!("{:.0}%", v * 100.0)
+                });
+            },
+        );
+        s.row(
+            icon::EYE,
+            "Hide until hover",
+            "Slide off screen until the pointer touches the edge",
+            "hidden auto hide",
+            |ui| {
+                toggle(ui, &mut l.hidden_until_hover);
+            },
+        );
+        s.end();
+
+        // What brings a hidden Pillbox into view; it hides again when the reason ends.
+        let hidden = self.draft.layout.hidden_until_hover;
+        let r = &mut self.draft.layout.reveal;
+        let needs = "Turn on Hide until hover first";
+        let mut s = Section::new(ui, "Hiding: show it again when", page, q);
+        s.row(
+            icon::MUSIC,
+            "Music plays",
+            if hidden {
+                "Keep it in view while a song plays, or only for a moment when a song changes"
+            } else {
+                needs
+            },
+            "song spotify show reveal hidden",
+            |ui| {
+                segmented_enabled(
+                    ui,
+                    &mut r.music,
+                    &[
+                        (MusicReveal::Never, "Never"),
+                        (MusicReveal::WhilePlaying, "While playing"),
+                        (MusicReveal::OnSongChange, "New song"),
+                    ],
+                    hidden,
+                );
+            },
+        );
+        let timed = hidden && r.music == MusicReveal::OnSongChange;
+        s.row(
+            icon::TIMER,
+            "A new song stays in view for",
+            if timed {
+                "Then it hides again"
+            } else {
+                "Used with Music plays: New song"
+            },
+            "seconds song change",
+            |ui| {
+                let mut v = r.song_seconds as f32;
+                if slider_enabled(ui, &mut v, 2.0..=30.0, 1.0, |v| format!("{v:.0} s"), timed) {
+                    r.song_seconds = v.round() as u32;
+                }
+            },
+        );
+        s.row(
+            icon::BELL,
+            "A notification arrives",
+            if hidden {
+                "Windows notifications mirrored on Pillbox"
+            } else {
+                needs
+            },
+            "toast alert stack",
+            |ui| {
+                toggle_enabled(ui, &mut r.notifications, hidden);
+            },
+        );
+        s.row(
+            icon::BOLT,
+            "An agent or script flashes",
+            if hidden {
+                "Claude Code, Codex and pillboxctl flashes"
+            } else {
+                needs
+            },
+            "flash agent claude codex pillboxctl",
+            |ui| {
+                toggle_enabled(ui, &mut r.flashes, hidden);
+            },
+        );
+        s.row(
+            icon::MIC,
+            "A call starts",
+            if hidden {
+                "An app uses the microphone"
+            } else {
+                needs
+            },
+            "meeting microphone timer",
+            |ui| {
+                toggle_enabled(ui, &mut r.calls, hidden);
+            },
+        );
+        s.row(
+            icon::CLOCK,
+            "A reminder rings",
+            if hidden { "Until you answer it" } else { needs },
+            "alarm timer",
+            |ui| {
+                toggle_enabled(ui, &mut r.reminders, hidden);
+            },
+        );
+        s.row(
+            icon::LOCK,
+            "A short notice shows",
+            if hidden {
+                "Lock keys, microphone muted, screenshot saved, colour copied"
+            } else {
+                needs
+            },
+            "caps lock num lock screenshot color picker",
+            |ui| {
+                toggle_enabled(ui, &mut r.notices, hidden);
+            },
+        );
+        s.end();
+
+        let b = &mut self.draft.behavior;
         let mut s = Section::new(ui, "Opening", page, q);
         s.row(
             icon::TILES,
@@ -443,29 +616,6 @@ impl SettingsApp {
             },
         );
         s.end();
-
-        let mut s = Section::new(ui, "Startup", page, q);
-        let mut autostart = self.autostart;
-        let mut failed = None;
-        s.row(
-            icon::POWER,
-            "Start with Windows",
-            "Open Pillbox when you sign in",
-            "autostart boot login",
-            |ui| {
-                if toggle(ui, &mut autostart)
-                    && let Err(e) = system::set_autostart(autostart)
-                {
-                    failed = Some(format!("{e:#}"));
-                }
-            },
-        );
-        s.end();
-        if let Some(e) = failed {
-            self.say(format!("Start with Windows: {e}"), false);
-        } else {
-            self.autostart = autostart;
-        }
     }
 
     // ---- Appearance ---------------------------------------------------------------------------
@@ -1254,15 +1404,10 @@ impl SettingsApp {
         );
         s.row(
             icon::HISTORY,
-            "Clear unpinned items after",
-            "Pinned items always stay",
+            "Copies are deleted after 2 days",
+            "For your privacy. Pin an item to keep it; snippets always stay",
             "expire delete old privacy days",
-            |ui| {
-                let labels = ["Never", "1 day", "7 days", "30 days"];
-                let options: Vec<(u32, &str)> =
-                    EXPIRE_CHOICES.iter().copied().zip(labels).collect();
-                segmented(ui, &mut c.expire_days, &options);
-            },
+            |_| {},
         );
         s.row(
             icon::PHOTO,
@@ -1457,19 +1602,6 @@ impl SettingsApp {
         );
         s.end();
 
-        let pop = &mut self.draft.popups;
-        let mut s = Section::new(ui, "Notices", page, q);
-        s.row(
-            icon::LOCK,
-            "Caps, Num and Scroll Lock",
-            "A short notice on Pillbox when one changes",
-            "lock keys keyboard",
-            |ui| {
-                toggle(ui, &mut pop.lock_keys);
-            },
-        );
-        s.end();
-
         let c = &mut self.draft.calls;
         let new = &mut self.new.calls_ignore;
         let mut s = Section::new(ui, "Calls, microphone and camera", page, q);
@@ -1480,6 +1612,16 @@ impl SettingsApp {
             "meeting zoom teams discord",
             |ui| {
                 toggle(ui, &mut c.call_timer);
+            },
+        );
+        let timer = c.call_timer;
+        s.row(
+            icon::EQUALIZER,
+            "Music before calls",
+            "While a song is on the pill it stays; the timer shows when the music stops",
+            "discord voice chat priority music call",
+            |ui| {
+                toggle_enabled(ui, &mut c.music_first, timer);
             },
         );
         s.row(
@@ -1981,6 +2123,20 @@ impl SettingsApp {
                         .color(SUB),
                 );
             },
+        );
+        s.row(
+            icon::SHIELD,
+            "Licence and terms",
+            "Free to use, no copying. Copyright (c) 2026 David Sejkora. LICENSE.txt, TERMS.txt and THIRD-PARTY-NOTICES.txt are in Pillbox's install folder",
+            "licence license terms copyright legal notices",
+            |_| {},
+        );
+        s.row(
+            icon::CLOUD,
+            "Weather data by Open-Meteo.com",
+            "Weather, air quality and place search, under the CC BY 4.0 licence",
+            "credits attribution open-meteo weather",
+            |_| {},
         );
         s.row(
             icon::FOLDER,

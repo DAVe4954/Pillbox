@@ -175,6 +175,8 @@ pub(super) struct Tools {
     /// The Play time card on the Home tab is expanded, and shows this day (0 = today).
     pub(super) play_open: bool,
     pub(super) play_day: usize,
+    /// The detailed Weather card on the Home tab is expanded (the next five days).
+    pub(super) weather_open: bool,
     todos: TodoList,
     focus_timer: FocusTimer,
     cpu: CpuMeter,
@@ -342,6 +344,7 @@ impl Tools {
             wdata: WidgetData::default(),
             play_open: false,
             play_day: 0,
+            weather_open: false,
             todos: store::load_json("todos.json"),
             focus_timer: FocusTimer::default(),
             cpu: CpuMeter::default(),
@@ -423,7 +426,7 @@ impl App {
         let removed = self
             .t
             .clip
-            .expire(unix_now(), self.settings.clipboard.expire_days);
+            .expire(unix_now(), pillbox_core::settings::CLIP_KEEP_DAYS);
         if !removed.is_empty() {
             tracing::info!("{} clipboard items expired", removed.len());
             self.forget_pictures(&removed);
@@ -1455,7 +1458,7 @@ impl App {
         removed.extend(
             self.t
                 .clip
-                .expire(unix_now(), self.settings.clipboard.expire_days),
+                .expire(unix_now(), pillbox_core::settings::CLIP_KEEP_DAYS),
         );
         self.forget_pictures(&removed);
         self.save_clip_index();
@@ -1883,6 +1886,7 @@ impl App {
                 self.t.play_day = 0;
             }
             WidgetAction::PlayDay(i) => self.t.play_day = i,
+            WidgetAction::WeatherToggle => self.t.weather_open = !self.t.weather_open,
         }
         self.refresh_widgets(false);
     }
@@ -2144,6 +2148,72 @@ impl App {
         } else {
             Vec::new()
         };
+        d.forecast = if d.weather_lines.is_empty() {
+            Vec::new()
+        } else {
+            let deg = |c: Option<f32>| {
+                c.map(|c| {
+                    let v = if s.weather.fahrenheit {
+                        c * 9.0 / 5.0 + 32.0
+                    } else {
+                        c
+                    };
+                    format!("{}°", v.round() as i32)
+                })
+                .unwrap_or_default()
+            };
+            self.faces
+                .forecast()
+                .iter()
+                .map(|f| crate::widgets::ForecastView {
+                    day: face::short_weekday(f.date).to_string(),
+                    glyph: face::weather_glyph(f.code, true),
+                    name: face::weather_name(f.code),
+                    high: deg(f.high_c),
+                    low: deg(f.low_c),
+                    rain: f
+                        .rain_pct
+                        .map(|p| format!("{}%", (p / 10.0).round() as u32 * 10)),
+                })
+                .collect()
+        };
+        d.today = if d.forecast.is_empty() {
+            Vec::new()
+        } else {
+            let unit = |c: f32| {
+                if s.weather.fahrenheit {
+                    c * 9.0 / 5.0 + 32.0
+                } else {
+                    c
+                }
+            };
+            self.faces
+                .today_hours()
+                .iter()
+                .map(|h| {
+                    let value = unit(h.temp_c);
+                    let time = face::format_time(
+                        face::LocalTime {
+                            hour: h.hour,
+                            ..Default::default()
+                        },
+                        s.behavior.clock_24h,
+                    );
+                    // Each point stands for its three hours.
+                    crate::widgets::HourView {
+                        time,
+                        temp: format!("{}°", value.round() as i32),
+                        value,
+                        glyph: face::weather_glyph(h.code, (6..20).contains(&h.hour)),
+                        past: h.hour + 3 <= now.hour,
+                        now: (h.hour..h.hour + 3).contains(&now.hour),
+                    }
+                })
+                .collect()
+        };
+        if d.forecast.is_empty() {
+            self.t.weather_open = false;
+        }
         let located = s.weather.latitude != 0.0 || s.weather.longitude != 0.0;
         let fmt = |m: f64| {
             let m = m.round() as u32;
@@ -2560,6 +2630,7 @@ impl App {
                 data: &self.t.wdata,
                 play_open: false,
                 play_day: 0,
+                weather_open: false,
             },
             notes: crate::tabs::NotesUi {
                 store: &empty_notes,

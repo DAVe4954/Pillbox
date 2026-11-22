@@ -229,6 +229,8 @@ pub struct WidgetsUi<'a> {
     /// The Play time card is expanded, and which day it shows (0 = today).
     pub play_open: bool,
     pub play_day: usize,
+    /// The detailed Weather card is expanded to show the next days.
+    pub weather_open: bool,
 }
 
 /// What the Activity tab (M7) draws from.

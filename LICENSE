@@ -1,0 +1,57 @@
+PILLBOX LICENCE
+
+Copyright (c) 2026 David Sejkora. All rights reserved.
+
+Pillbox is free software in the sense of "free of charge", not open source. This licence
+says what you may and may not do with it.
+
+1. What you may do
+
+   You may download Pillbox from its official GitHub page
+   (https://github.com/DAVe4954/Pillbox), install it, and use it free of charge on any
+   number of computers, at home or at work.
+
+   You may tell others about Pillbox and share the link to its official GitHub page.
+
+2. What you may not do
+
+   Unless the copyright holder has allowed it in writing, you may not:
+
+   a. copy, publish, share, sell, rent or otherwise distribute Pillbox, its installer or its
+      source code, in whole or in part, outside its official GitHub page;
+   b. change, translate or adapt Pillbox or its source code, or make other software based on
+      it;
+   c. use any part of the source code in another project;
+   d. charge anyone for Pillbox, or for access to it;
+   e. remove or change this licence, the copyright notice or the other notices that come
+      with Pillbox.
+
+   Where the law of your country gives you a right that this section takes away (for example
+   to study how a program works), that right stays yours.
+
+3. The source code on GitHub
+
+   The source code is public so that anyone can see what Pillbox does. Seeing it gives no
+   permission beyond this licence. GitHub's own terms let GitHub users view and fork public
+   repositories on GitHub; that does not allow anything in section 2.
+
+4. Parts made by others
+
+   Pillbox is built with open-source libraries made by others. Each is used under its own
+   licence; they are listed, with their licence texts, in THIRD-PARTY-NOTICES.txt. This
+   licence does not limit any right those licences give you for those parts.
+
+5. No warranty
+
+   Pillbox is provided "as is", without warranty of any kind. See TERMS.md (the Terms of Use)
+   for the full wording and the limits of liability.
+
+6. Ending
+
+   This licence ends by itself if you break it. You must then remove Pillbox from your
+   computers. Sections 2 to 6 continue to apply after it ends.
+
+7. Questions
+
+   To ask for a permission this licence does not give, open an issue on the official GitHub
+   page.

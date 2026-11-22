@@ -26,6 +26,12 @@ pub fn wants_weather(s: &Settings) -> bool {
             || s.widgets.shown.contains(&WidgetKind::Weather))
 }
 
+/// One finished weather request: now, and the days ahead.
+type WeatherReading = (WeatherNow, Vec<face::DayForecast>, Vec<face::HourTemp>);
+
+/// Days after today in the expanded Weather card.
+pub const FORECAST_DAYS: usize = 5;
+
 /// How long a weather reading stays fresh.
 const WEATHER_MAX_AGE: Duration = Duration::from_secs(25 * 60);
 
@@ -36,7 +42,11 @@ pub struct Faces {
     weather: Option<WeatherNow>,
     /// Coordinates and time of the last successful or attempted fetch.
     weather_for: Option<(f32, f32, Instant)>,
-    weather_rx: Option<Receiver<Option<WeatherNow>>>,
+    /// The next days, for the expanded detailed Weather card.
+    forecast: Vec<face::DayForecast>,
+    /// Today's temperatures through the day, for the expanded Weather card.
+    today: Vec<face::HourTemp>,
+    weather_rx: Option<Receiver<Option<WeatherReading>>>,
     pub pet_blink: bool,
 }
 
@@ -78,7 +88,14 @@ impl Faces {
                     .call()
                     .ok()
                     .and_then(|r| r.into_string().ok())
-                    .and_then(|body| face::parse_open_meteo(&body));
+                    .and_then(|body| {
+                        let now = face::parse_open_meteo(&body)?;
+                        Some((
+                            now,
+                            face::parse_forecast(&body, FORECAST_DAYS),
+                            face::day_hours(&face::parse_today_hours(&body)),
+                        ))
+                    });
                 let _ = tx.send(result);
                 waker.wake();
             });
@@ -97,9 +114,16 @@ impl Faces {
             Ok(result) => {
                 self.weather_rx = None;
                 match result {
-                    Some(w) => {
-                        tracing::info!("weather updated: {:.1} °C, code {}", w.temp_c, w.code);
+                    Some((w, days, today)) => {
+                        tracing::info!(
+                            "weather updated: {:.1} °C, code {}, {} days ahead",
+                            w.temp_c,
+                            w.code,
+                            days.len()
+                        );
                         self.weather = Some(w);
+                        self.forecast = days;
+                        self.today = today;
                     }
                     None => tracing::warn!("weather request failed"),
                 }
@@ -117,6 +141,16 @@ impl Faces {
     pub fn weather_text(&self, s: &Settings) -> Option<String> {
         self.weather
             .map(|w| face::format_weather(w, s.weather.fahrenheit))
+    }
+
+    /// The next days of the forecast; empty until a reading with them has arrived.
+    pub fn forecast(&self) -> &[face::DayForecast] {
+        &self.forecast
+    }
+
+    /// Today's temperatures at a few hours of the day; empty until a reading has them.
+    pub fn today_hours(&self) -> &[face::HourTemp] {
+        &self.today
     }
 
     /// Lines for the detailed weather look; empty until a reading has arrived.

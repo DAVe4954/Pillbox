@@ -2,7 +2,7 @@
 ; Installs for the current user only (no administrator prompt) into %LOCALAPPDATA%\Programs\Pillbox.
 
 #define AppName "Pillbox"
-#define AppVersion "0.1.1"
+#define AppVersion "0.1.3"
 
 [Setup]
 ; A fixed id, so a newer installer upgrades an older install instead of installing twice.
@@ -25,6 +25,10 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\pillbox.exe
+; The licence and the terms of use, shown before installing; they must be accepted.
+; installer\build.ps1 writes this file from LICENSE and TERMS.md.
+LicenseFile=EULA.txt
+AppCopyright=Copyright (c) 2026 David Sejkora
 
 [Tasks]
 Name: "startup"; Description: "Start Pillbox when I sign in to Windows"; Flags: checkedonce
@@ -34,6 +38,9 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 Source: "..\target\release\pillbox.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\target\release\pillboxctl.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+Source: "..\TERMS.md"; DestDir: "{app}"; DestName: "TERMS.txt"; Flags: ignoreversion
+Source: "..\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\pillbox.exe"

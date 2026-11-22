@@ -33,8 +33,7 @@
 9. [Good to know (limits)](#good-to-know-limits)
 10. [Problems and answers](#problems-and-answers)
 11. [Updating and removing it](#updating-and-removing-it)
-12. [Build it yourself](#build-it-yourself)
-13. [For the person who publishes it](#for-the-person-who-publishes-it)
+12. [Licence and terms](#licence-and-terms)
 
 ---
 
@@ -54,7 +53,7 @@
 
 Pillbox never opens a window of its own and has no taskbar button; it lives in that pill and in the tray icon.
 
-**Start with Windows later (or stop it):** right-click the tray icon and tick or untick **Start with Windows**, or use the switch in Settings > General.
+**Start with Windows later (or stop it):** right-click the tray icon and tick or untick **Start with Windows**, or use the switch at the top of Settings > General.
 
 ---
 
@@ -86,7 +85,9 @@ A grid of small tiles you choose in Settings: **clock**, **world clocks**, **day
 
 Drag a widget out with its small corner button and it **pops out onto the desktop** as its own floating tile (right-click it to close).
 
-**Play time.** Time spent in full-screen *games* is counted per game and per day (the last 60 days, kept only on your PC). **Click the Play time tile to expand it**: it shows a chip for each of the last 7 days and, for the day you pick, every game you played with how long and a bar to compare them. Only games are counted: browsers, video players, Steam and other launchers, Discord and similar are ignored.
+**Weather.** With the *detailed* weather look (Settings > Home & widgets), **click the Weather tile to expand it**: today's temperatures from 6:00 to 21:00 appear as a small curve (the hour you are in is highlighted), and below them the next five days, each with the weekday, the weather, the high and low and the chance of rain.
+
+**Play time.** Time spent in *games* is counted per game and per day (the last 60 days, kept only on your PC). Well-known games such as Roblox, Minecraft, Fortnite, Valorant or THE FINALS count whenever they are the app in front, in a window too, and show under their real name. Other games count while they run full screen. **Click the Play time tile to expand it**: it shows a chip for each of the last 7 days and, for the day you pick, every game you played with how long and a bar to compare them. Only games are counted: browsers, video players, Steam and other launchers, Discord and similar are ignored.
 
 <p align="center">
   <img src="docs/images/home.png" alt="The Play time tile closed: 1h 55m today, week 7h 20m, most played Elden Ring" width="340">
@@ -105,7 +106,7 @@ Shows what is playing in **any** player (Spotify, YouTube in a browser, VLC...):
 
 ### Clipboard
 
-A history of what you copied (text, links, pictures, files), searchable, with **pin**, **copy back**, **delete**, and **text from pictures** (it reads the words in a screenshot). Stored encrypted for your Windows account. Text snippets you save are one click away. Anything a password manager marks as secret is not recorded, you can list apps to ignore, and entries can expire after a number of days.
+A history of what you copied (text, links, pictures, files), searchable, with **pin**, **copy back**, **delete**, and **text from pictures** (it reads the words in a screenshot). Stored encrypted for your Windows account. Text snippets you save are one click away. Anything a password manager marks as secret is not recorded, you can list apps to ignore, and unpinned copies are **deleted after 2 days**. Pinned items and snippets stay.
 
 <p align="center"><img src="docs/images/clipboard.png" alt="The Clipboard tab: a search box, filters (All, Text, Links, Pictures, Files, Pinned, Snippets) and a list of recent copies" width="420"></p>
 
@@ -179,7 +180,22 @@ You can also make **your own fade** (Settings > Appearance > Your fade): pick tw
 
 ## Settings
 
-Open **Settings** from the gear (or the tray icon). It is a normal window with ten pages (General, Appearance, Music, Widgets, Clipboard & Shelf, Notifications, Games & Apps, Agents, Shortcuts, About) and a **search box** at the top. Every change is **saved automatically** a moment after you make it and Pillbox applies it at once. Nothing needs an OK button. **About > Reset all settings** puts everything back (your clipboard history, reminders and shelf are kept).
+Open **Settings** from the gear (or the tray icon). It is a normal window with eleven pages and a **search box** at the top. Each page says in one line what it is for:
+
+| Page | What is there |
+|---|---|
+| General | Start with Windows, where Pillbox sits and how big it is, hiding, opening |
+| Closed pill | What the small pill shows: the clock (or date, weather, battery...), the playing song, the call timer, the microphone dot, notices. Every one can be switched off, and **Music before calls** keeps the song on the pill while an app such as Discord holds the microphone |
+| Appearance | Colours, themes, fades and glass |
+| Music | The song on the pill and the Music tab |
+| Home & widgets | The Home tab's widgets, weather and the System window |
+| Clipboard & Shelf | Clipboard history, snippets, the file shelf and your phone |
+| Notifications & calls | Windows notifications, calls and the microphone, reminders |
+| Games & Apps | What Pillbox does while you play, and rules for single apps |
+| Agents | Claude Code, Codex and the chat drawer |
+| Shortcuts | Keyboard shortcuts and the launcher |
+| About | Version, licence, your data, and resetting |
+ Every change is **saved automatically** a moment after you make it and Pillbox applies it at once. Nothing needs an OK button. **About > Reset all settings** puts everything back (your clipboard history, reminders and shelf are kept).
 
 <p align="center">
   <img src="docs/images/settings-appearance.png" alt="Settings, Appearance page: a grid of surfaces to pick from, such as Black, Graphite, Liquid Glass and Peach" width="440">
@@ -260,5 +276,11 @@ The long technical notes on every one of these, including exactly how phone tran
 - **Remove:** Windows **Settings > Apps > Installed apps > Pillbox > Uninstall**. This also removes the start-with-Windows entry. To erase every trace, also delete `%APPDATA%\Pillbox` and `%LOCALAPPDATA%\Pillbox`.
 - If you used the name **Island** before (an earlier version), Pillbox copies your old settings and data over the first time it starts, and moves the *Start with Windows* entry to the new name. The old folder is left alone and can be deleted.
 
----
 
+## Licence and terms
+
+Pillbox is **free to use, but not open source**: you may download and use it for free, but not copy, change, sell or share its code or app outside this page. The full wording is in [LICENSE](LICENSE), and the [Terms of Use](TERMS.md) explain the no-warranty terms and what Pillbox sends where. The installer asks you to accept both.
+
+Pillbox is built with open-source libraries, all under licences that allow free and commercial use; they and their licence texts are listed in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Weather data by [Open-Meteo.com](https://open-meteo.com) (CC BY 4.0).
+
+Copyright (c) 2026 David Sejkora.

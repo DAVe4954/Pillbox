@@ -17,3 +17,6 @@
 !/docs/REFERENCE.md
 /docs/m9/*
 !/docs/m9/fade-themes.png
+
+# Made by installer/build.ps1 from LICENSE and TERMS.md.
+/installer/EULA.txt

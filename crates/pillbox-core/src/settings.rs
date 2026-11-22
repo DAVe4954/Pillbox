@@ -329,6 +329,8 @@ pub struct Behavior {
     /// What the clock face on the resting pill shows besides the time.
     pub pill_clock: PillClock,
     pub visualizer: Visualizer,
+    /// Slide in and say "Pillbox is running" for a moment after starting, even when hidden.
+    pub start_greeting: bool,
 }
 
 impl Default for Behavior {
@@ -341,6 +343,7 @@ impl Default for Behavior {
             clock_24h: true,
             pill_clock: PillClock::Time,
             visualizer: Visualizer::PixelBars,
+            start_greeting: true,
         }
     }
 }
@@ -705,6 +708,9 @@ pub struct Music {
     pub source_mode: SourceMode,
     /// App names matched anywhere in the media session's app id, e.g. "spotify".
     pub source_apps: Vec<String>,
+    /// Show the playing song (cover, title, bars) on the closed pill. Off = the closed pill
+    /// keeps its own face while music plays; the Music tab is unchanged.
+    pub on_pill: bool,
     /// Show the song title on the resting pill while music plays.
     pub title_in_pill: bool,
     /// Colour the resting pill with the album cover's colours while music plays.
@@ -726,6 +732,7 @@ impl Default for Music {
             enabled: true,
             source_mode: SourceMode::All,
             source_apps: Vec::new(),
+            on_pill: true,
             title_in_pill: true,
             pill_colors: true,
             reactive_background: true,
@@ -776,6 +783,10 @@ pub struct Launcher {
 pub struct Calls {
     /// Show a timer on the pill while any app uses the microphone.
     pub call_timer: bool,
+    /// While music plays on the closed pill, the song stays and the call timer waits (an app
+    /// that keeps the microphone open, such as a Discord voice chat, then never hides the
+    /// song). The dot still shows the microphone is in use.
+    pub music_first: bool,
     /// A small dot on the pill while the microphone or camera is in use.
     pub sensor_dot: bool,
     /// Executable or app names whose mic/camera use is not shown (matched anywhere in the name).
@@ -786,6 +797,7 @@ impl Default for Calls {
     fn default() -> Self {
         Self {
             call_timer: true,
+            music_first: true,
             sensor_dot: true,
             ignore_apps: Vec::new(),
         }
@@ -806,9 +818,6 @@ pub struct ClipboardSettings {
     pub enabled: bool,
     /// Unpinned items beyond this are dropped, oldest first.
     pub max_items: u32,
-    /// Unpinned items older than this many days are dropped; 0 = kept until `max_items`
-    /// pushes them out. One of `EXPIRE_CHOICES`.
-    pub expire_days: u32,
     /// Keep pictures (they take the most space).
     pub pictures: bool,
     /// Show the list in two columns.
@@ -825,7 +834,6 @@ impl Default for ClipboardSettings {
         Self {
             enabled: true,
             max_items: 200,
-            expire_days: 0,
             pictures: true,
             two_columns: false,
             snippets: Vec::new(),
@@ -834,8 +842,9 @@ impl Default for ClipboardSettings {
     }
 }
 
-/// The choices for `clipboard.expire_days` (0 = never).
-pub const EXPIRE_CHOICES: [u32; 4] = [0, 1, 7, 30];
+/// Unpinned clipboard items older than this many days are deleted (pinned items and snippets
+/// stay). Fixed: copies often hold private text, so they never pile up.
+pub const CLIP_KEEP_DAYS: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1341,7 +1350,8 @@ fn replace_at(root: &mut Value, path: &[String], new: Value) -> Option<Value> {
 /// Settings that older versions wrote and this one no longer has. They are dropped without a
 /// warning (a file from an older version is not a mistake); `layout.height` first becomes
 /// `layout.size` (see `migrate`).
-pub const RETIRED: [&str; 8] = [
+pub const RETIRED: [&str; 9] = [
+    "clipboard.expire_days",
     "layout.width",
     "layout.height",
     "layout.roundness",
@@ -1384,6 +1394,19 @@ fn migrate(user: &mut Value) {
 }
 
 impl Settings {
+    /// Whether the closed pill shows the playing song (`music_playing`: a track is playing).
+    pub fn song_on_pill(&self, music_playing: bool) -> bool {
+        self.music.enabled && self.music.on_pill && music_playing
+    }
+
+    /// Whether the closed pill shows the call timer while an app uses the microphone
+    /// (`in_call`). With `calls.music_first`, a song on the pill keeps its place.
+    pub fn call_on_pill(&self, in_call: bool, music_playing: bool) -> bool {
+        in_call
+            && self.calls.call_timer
+            && !(self.calls.music_first && self.song_on_pill(music_playing))
+    }
+
     /// Parse a settings file. `Err` only when the text is not JSON at all; otherwise every
     /// usable value is applied over the defaults and the problems are listed as warnings.
     pub fn from_json(text: &str) -> Result<(Settings, Vec<String>), serde_json::Error> {
@@ -1589,15 +1612,6 @@ impl Settings {
         });
         let c = &mut self.clipboard;
         c.max_items = c.max_items.clamp(10, 5000);
-        if !EXPIRE_CHOICES.contains(&c.expire_days) {
-            // The nearest choice; a tie goes to the longer one (keeps more).
-            let wanted = c.expire_days;
-            c.expire_days = EXPIRE_CHOICES
-                .iter()
-                .copied()
-                .min_by_key(|d| (d.abs_diff(wanted), u32::MAX - d))
-                .unwrap_or(0);
-        }
         self.weather.place = self.weather.place.trim().to_string();
         self.layout.reveal.song_seconds = self.layout.reveal.song_seconds.clamp(2, 30);
         let ck = &mut self.appearance.clock;
@@ -1667,6 +1681,39 @@ impl Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn music_keeps_the_pill_during_a_call_unless_told_otherwise() {
+        let mut s = Settings::default();
+        // Defaults: the song stays, the call timer waits.
+        assert!(s.song_on_pill(true));
+        assert!(!s.call_on_pill(true, true));
+        // No music: the call shows.
+        assert!(s.call_on_pill(true, false));
+        assert!(!s.call_on_pill(false, false));
+        // Calls first: the call takes the pill even with music.
+        s.calls.music_first = false;
+        assert!(s.call_on_pill(true, true));
+        // Song off the pill: nothing to make way for, so the call shows.
+        s.calls.music_first = true;
+        s.music.on_pill = false;
+        assert!(!s.song_on_pill(true));
+        assert!(s.call_on_pill(true, true));
+        // Call timer off: never.
+        s.calls.call_timer = false;
+        assert!(!s.call_on_pill(true, false));
+    }
+
+    #[test]
+    fn old_files_get_the_new_pill_switches_on() {
+        let (s, w) =
+            parse(r#"{ "calls": { "call_timer": true }, "music": { "title_in_pill": false } }"#);
+        assert!(w.is_empty(), "{w:?}");
+        assert!(s.calls.music_first);
+        assert!(s.music.on_pill);
+        assert!(!s.music.title_in_pill);
+        assert!(s.behavior.start_greeting);
+    }
 
     fn parse(text: &str) -> (Settings, Vec<String>) {
         match Settings::from_json(text) {
@@ -1907,35 +1954,20 @@ mod tests {
         let s = Settings::default();
         assert_eq!(s.behavior.pill_clock, PillClock::Time);
         assert!(s.music.pill_colors);
-        assert_eq!(s.clipboard.expire_days, 0);
         assert!(s.weather.place.is_empty());
         let (s, w) = parse(
             r#"{ "behavior": { "pill_clock": "day_time", "visualizer": "off" },
                  "music": { "pill_colors": false },
-                 "weather": { "place": "  Prague, Czechia " },
-                 "clipboard": { "expire_days": 7 } }"#,
+                 "weather": { "place": "  Prague, Czechia " } }"#,
         );
         assert!(w.is_empty(), "{w:?}");
         assert_eq!(s.behavior.pill_clock, PillClock::DayTime);
         assert_eq!(s.behavior.visualizer, Visualizer::Off);
         assert!(!s.music.pill_colors);
         assert_eq!(s.weather.place, "Prague, Czechia");
-        assert_eq!(s.clipboard.expire_days, 7);
-        // A day count that is not a choice snaps to the nearest one (ties keep more).
-        for (days, want) in [
-            (2, 1),
-            (4, 7),
-            (5, 7),
-            (20, 30),
-            (365, 30),
-            (19, 30),
-            (18, 7),
-        ] {
-            let (s, _) = parse(&format!(
-                r#"{{ "clipboard": {{ "expire_days": {days} }} }}"#
-            ));
-            assert_eq!(s.clipboard.expire_days, want, "{days} days");
-        }
+        // The old expiry choice is retired: an old file still loads, quietly.
+        let (_, w) = parse(r#"{ "clipboard": { "expire_days": 7 } }"#);
+        assert!(w.is_empty(), "{w:?}");
     }
 
     #[test]

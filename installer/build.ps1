@@ -8,6 +8,10 @@ Push-Location $root
 try {
     cargo build --release --workspace
     if ($LASTEXITCODE -ne 0) { throw 'cargo build failed' }
+    # The page the installer asks people to accept: the licence, then the terms of use.
+    $eula = (Get-Content -Raw -Encoding UTF8 "$root\LICENSE") + "`r`n`r`n" + (Get-Content -Raw -Encoding UTF8 "$root\TERMS.md")
+    $eula = $eula -replace "(?<!`r)`n", "`r`n"
+    [IO.File]::WriteAllText("$PSScriptRoot\EULA.txt", $eula, (New-Object Text.UTF8Encoding $true))
     $iscc = @(
         "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",

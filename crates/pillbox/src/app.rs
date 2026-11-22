@@ -426,6 +426,9 @@ impl App {
                 None
             }
         };
+        if std::env::var_os("PILLBOX_FAKE_MIC").is_some() {
+            app.set_in_use(InUse::default());
+        }
         app.begin_intro();
         // Draw and shape the window before it becomes visible, so there is no flash.
         app.draw();
@@ -437,7 +440,10 @@ impl App {
     /// stays in view for `INTRO_MS` even when it is set to hide, so a start at sign-in is seen.
     /// Skipped while a game or a full-screen app has the screen (the mode is not Normal).
     fn begin_intro(&mut self) {
-        if self.mode != Mode::Normal || !self.effective_visible() {
+        if !self.settings.behavior.start_greeting
+            || self.mode != Mode::Normal
+            || !self.effective_visible()
+        {
             return;
         }
         self.intro_until = Some(Instant::now() + Duration::from_millis(INTRO_MS.into()));
@@ -511,11 +517,13 @@ impl App {
         self.toast.is_none()
             && !self.note_stack_showing()
             && !self.call_showing()
-            && self.music_playing()
+            && self.settings.song_on_pill(self.music_playing())
     }
 
+    /// The call timer has the closed pill (`Settings::call_on_pill`: music may keep it).
     fn call_showing(&self) -> bool {
-        self.call_since.is_some() && self.settings.calls.call_timer
+        self.settings
+            .call_on_pill(self.call_since.is_some(), self.music_playing())
     }
 
     /// The resting pill's size for what it shows now (see `Placement::resting`).
@@ -831,7 +839,9 @@ impl App {
         let want = self.music_playing()
             && self.effective_visible()
             && self.mode == Mode::Normal
-            && (self.settings.behavior.visualizer != VisualizerStyle::Off || glow);
+            && ((self.settings.music.on_pill
+                && self.settings.behavior.visualizer != VisualizerStyle::Off)
+                || glow);
         if want && self.visualizer.is_none() {
             self.visualizer = Some(Visualizer::start());
         } else if !want {
@@ -1144,7 +1154,14 @@ impl App {
         }
     }
 
-    fn set_in_use(&mut self, raw: InUse) {
+    fn set_in_use(&mut self, mut raw: InUse) {
+        // Developer aid: pretend an app holds the microphone (`PILLBOX_FAKE_MIC=discord`).
+        if let Ok(app) = std::env::var("PILLBOX_FAKE_MIC")
+            && !app.is_empty()
+            && !raw.mic.contains(&app)
+        {
+            raw.mic.push(app);
+        }
         let ignore = &self.settings.calls.ignore_apps;
         let keep = |apps: Vec<String>| -> Vec<String> {
             apps.into_iter()
@@ -1737,6 +1754,8 @@ impl App {
                 );
                 self.check_reminders();
                 self.count_screen_time();
+                // Clipboard copies go after two days even when nobody opens the tab.
+                self.expire_clips();
                 self.script_housekeeping();
                 self.flush_play();
                 self.refresh_widgets(false);
@@ -1825,7 +1844,10 @@ impl App {
                 // Once a second during a call: the timer text, and the mute state in case it
                 // was changed somewhere else (Windows settings, a headset button).
                 self.mic_muted = devices::mic_muted().unwrap_or(self.mic_muted);
-                self.dirty = true;
+                // Redraw only where the call is on screen (not while music keeps the pill).
+                if self.call_showing() || (self.open && self.tab == Tab::Controls) {
+                    self.dirty = true;
+                }
             }
             _ => {}
         }
@@ -1871,7 +1893,8 @@ impl App {
         if self.open && self.tab == Tab::Home {
             return self.theme.touch.is_some();
         }
-        self.music_playing()
+        // Closed, the song moves only while it is on the pill.
+        self.music_playing() && (self.open || self.settings.music.on_pill)
     }
 
     /// A moving theme (drift or shimmer) is in sight. Hidden until hover and slid away, it
@@ -2032,6 +2055,7 @@ impl App {
                 data: &self.t.wdata,
                 play_open: self.t.play_open,
                 play_day: self.t.play_day,
+                weather_open: self.t.weather_open,
             },
             notes: crate::tabs::NotesUi {
                 store: &self.notes.store,
@@ -2147,7 +2171,9 @@ impl App {
             visualizer: self.settings.behavior.visualizer,
             toast: self.toast.as_ref(),
             notes: note_stack.as_ref(),
-            call,
+            // On the closed pill only when it has the pill (music may keep it); the Controls
+            // tab above shows any call.
+            call: call.filter(|_| self.call_showing()),
             sensor_dot: if self.settings.calls.sensor_dot {
                 (!self.in_use.mic.is_empty(), !self.in_use.camera.is_empty())
             } else {
@@ -2212,6 +2238,12 @@ fn scrub_fraction(scrub: &Scrub, x: f32) -> f32 {
 /// Start the Settings window: this same executable with `--settings`, as its own process, so
 /// Pillbox itself stays small and can never be blocked by it.
 fn open_settings_window() {
+    // Already open (maybe minimised or behind other windows): bring that one forward. A
+    // second copy would only find it running and quit.
+    if crate::platform::settings_window::bring_forward(crate::settings_ui::TITLE) {
+        tracing::info!("settings window brought forward");
+        return;
+    }
     let spawned = std::env::current_exe()
         .and_then(|exe| std::process::Command::new(exe).arg("--settings").spawn());
     match spawned {

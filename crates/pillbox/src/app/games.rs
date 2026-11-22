@@ -103,7 +103,7 @@ impl App {
             });
         // Play time counts games only: a browser or a launcher's helper that is fullscreen
         // changes how Pillbox behaves (when "every fullscreen app" is on) but is not play.
-        let game = behavior.and_then(|_| {
+        let fullscreen_game = behavior.and_then(|_| {
             self.fullscreen
                 .as_ref()
                 .filter(|f| !f.exe.as_deref().is_some_and(games::is_non_game_exe))
@@ -113,11 +113,25 @@ impl App {
                         .map_or_else(|| "Game".to_string(), playtime::game_name)
                 })
         });
-        self.track_play(game);
+        // A known game counts whenever it is in front: in a window too (Roblox usually is),
+        // and on any screen. The user's "not a game" list still wins.
+        let exe = foreground::foreground_exe();
+        let known = exe
+            .as_deref()
+            .filter(|e| {
+                !self
+                    .settings
+                    .games
+                    .ignore_apps
+                    .iter()
+                    .any(|i| i.eq_ignore_ascii_case(e))
+            })
+            .and_then(games::known_game)
+            .map(str::to_string);
+        self.track_play(fullscreen_game.or(known));
         if !self.t.ringing.is_empty() {
             return Mode::Normal;
         }
-        let exe = foreground::foreground_exe();
         if let Some(rule) = exe.as_deref().and_then(|e| self.settings.rule_for(e)) {
             return match rule {
                 RuleBehavior::Hide => Mode::Hidden,

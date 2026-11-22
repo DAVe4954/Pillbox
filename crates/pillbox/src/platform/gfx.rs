@@ -235,7 +235,9 @@ impl Fonts {
         let mut collection: Option<IDWriteFontCollection> = None;
         // SAFETY: the out-pointer is a valid local Option; the factory is alive.
         let _ = unsafe { dwrite.GetSystemFontCollection(&mut collection, false) };
-        let installed = |name: PCWSTR| -> bool {
+        // A family counts only if it is installed and really has `probe` (a name alone is not
+        // enough: a broken or partial copy of a font would draw empty boxes).
+        let usable = |name: PCWSTR, probe: u32| -> bool {
             if pretend_win10 && (name == TEXT_FONTS[0] || name == ICON_FONTS[0]) {
                 return false;
             }
@@ -243,12 +245,28 @@ impl Fonts {
                 return false;
             };
             let (mut index, mut exists) = (0u32, BOOL(0));
-            // SAFETY: `name` is a 'static wide literal; both out-pointers are valid locals.
-            unsafe { c.FindFamilyName(name, &mut index, &mut exists) }.is_ok() && exists.as_bool()
+            // SAFETY: `name` is a 'static wide literal; both out-pointers are valid locals; the
+            // family and font are owned COM objects released on drop.
+            unsafe {
+                if c.FindFamilyName(name, &mut index, &mut exists).is_err() || !exists.as_bool() {
+                    return false;
+                }
+                c.GetFontFamily(index)
+                    .and_then(|family| {
+                        family.GetFirstMatchingFont(
+                            DWRITE_FONT_WEIGHT_NORMAL,
+                            DWRITE_FONT_STRETCH_NORMAL,
+                            DWRITE_FONT_STYLE_NORMAL,
+                        )
+                    })
+                    .and_then(|font| font.HasCharacter(probe))
+                    .is_ok_and(|has| has.as_bool())
+            }
         };
+        // 'A' for text; the Home icon (on every tab row) for icons.
         let fonts = Self {
-            text: first_installed(&TEXT_FONTS, installed).unwrap_or(TEXT_FONTS[1]),
-            icon: first_installed(&ICON_FONTS, installed).unwrap_or(ICON_FONTS[1]),
+            text: first_installed(&TEXT_FONTS, |n| usable(n, 'A' as u32)).unwrap_or(TEXT_FONTS[1]),
+            icon: first_installed(&ICON_FONTS, |n| usable(n, 0xE80F)).unwrap_or(ICON_FONTS[1]),
         };
         // SAFETY: both are 'static, null-terminated wide literals.
         let (t, i) = unsafe { (fonts.text.to_string(), fonts.icon.to_string()) };
