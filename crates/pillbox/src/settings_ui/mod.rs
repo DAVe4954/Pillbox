@@ -94,7 +94,7 @@ impl Page {
             Page::Clipboard => "Clipboard history, snippets, the file shelf and your phone",
             Page::Notifications => "Windows notifications, calls and the microphone, reminders",
             Page::Games => "What Pillbox does while you play, and rules for single apps",
-            Page::Agents => "Claude Code, Codex and the chat drawer",
+            Page::Agents => "Claude Code, Codex and the Activity tab",
             Page::Shortcuts => "Keyboard shortcuts and the launcher",
             Page::About => "Version, your data, and resetting",
         }

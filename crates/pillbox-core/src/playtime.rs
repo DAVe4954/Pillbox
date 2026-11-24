@@ -201,6 +201,98 @@ pub fn format_duration(seconds: u64) -> String {
     }
 }
 
+/// "1 h 20 min", "35 min", "2 h".
+fn spoken_duration(seconds: u64) -> String {
+    let minutes = seconds / 60;
+    match (minutes / 60, minutes % 60) {
+        (0, m) => format!("{m} min"),
+        (h, 0) => format!("{h} h"),
+        (h, m) => format!("{h} h {m} min"),
+    }
+}
+
+/// What the closed pill says after a game was quit: "THE FINALS, 1 h 20 min".
+pub fn recap_text(game: &str, seconds: u64) -> String {
+    format!("{game}, {}", spoken_duration(seconds))
+}
+
+/// Shorter sessions get no recap (a game started by mistake, a launcher).
+pub const RECAP_MIN_SECONDS: u64 = 60;
+/// A game counts as quit when it had no window this many checks in a row: some games close one
+/// window before they open the next.
+const GONE_CHECKS: u8 = 2;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Session {
+    game: String,
+    pid: u32,
+    /// Time in front so far (what play time counts).
+    seconds: u64,
+    /// Checks in a row that found no window of it.
+    gone: u8,
+}
+
+/// The games running now, in front or behind, until each is quit.
+#[derive(Debug, Default)]
+pub struct Sessions(Vec<Session>);
+
+impl Sessions {
+    /// A game came to the front. A game that was restarted (another process) goes on.
+    pub fn started(&mut self, game: &str, pid: u32) {
+        match self.0.iter_mut().find(|s| s.game == game) {
+            Some(s) => {
+                s.pid = pid;
+                s.gone = 0;
+            }
+            None => self.0.push(Session {
+                game: game.to_string(),
+                pid,
+                seconds: 0,
+                gone: 0,
+            }),
+        }
+    }
+
+    /// Time played, for a game that is running.
+    pub fn add(&mut self, game: &str, seconds: u64) {
+        if let Some(s) = self.0.iter_mut().find(|s| s.game == game) {
+            s.seconds += seconds;
+        }
+    }
+
+    /// Look which games are gone. `front` is the game in front (certainly running) and
+    /// `has_window` tells whether a process has a window on screen or minimised. Returns the
+    /// games that were quit, with the time played.
+    pub fn check(
+        &mut self,
+        front: Option<&str>,
+        has_window: impl Fn(u32) -> bool,
+    ) -> Vec<(String, u64)> {
+        let mut quit = Vec::new();
+        self.0.retain_mut(|s| {
+            if front == Some(s.game.as_str()) || has_window(s.pid) {
+                s.gone = 0;
+                return true;
+            }
+            s.gone += 1;
+            if s.gone < GONE_CHECKS {
+                return true;
+            }
+            quit.push((s.game.clone(), s.seconds));
+            false
+        });
+        quit
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+}
+
 /// A readable game name from its executable: a known game by the name people know it by
 /// (`RobloxPlayerBeta.exe` → "Roblox", `discovery.exe` → "THE FINALS"), any other from its file
 /// name (`FortniteClient-Win64-Shipping.exe` → "Fortnite", `RocketLeague.exe` → "RocketLeague").
@@ -368,6 +460,60 @@ mod tests {
         log.add(day(17), "New", 60);
         assert_eq!(log.days.len(), 1);
         assert!(log.days.contains_key("2026-11-17"));
+    }
+
+    #[test]
+    fn a_quit_game_gets_its_recap() {
+        let mut s = Sessions::default();
+        s.started("THE FINALS", 10);
+        s.add("THE FINALS", 4000);
+        // Alt-tabbed away (its window is still there), then back.
+        assert!(s.check(None, |_| true).is_empty());
+        s.started("THE FINALS", 10);
+        s.add("THE FINALS", 800);
+        // Gone: the first check may be a change of windows, the second settles it.
+        assert!(s.check(None, |_| false).is_empty());
+        assert_eq!(
+            s.check(None, |_| false),
+            vec![("THE FINALS".to_string(), 4800)]
+        );
+        assert!(s.is_empty());
+        assert_eq!(recap_text("THE FINALS", 4800), "THE FINALS, 1 h 20 min");
+        assert_eq!(recap_text("Roblox", 60), "Roblox, 1 min");
+        assert_eq!(recap_text("Roblox", 7250), "Roblox, 2 h");
+    }
+
+    #[test]
+    fn a_restarted_game_or_the_one_in_front_is_not_quit() {
+        let mut s = Sessions::default();
+        s.started("Roblox", 1);
+        s.add("Roblox", 100);
+        assert!(s.check(None, |_| false).is_empty());
+        // A new process of the same game: one session.
+        s.started("Roblox", 2);
+        s.add("Roblox", 50);
+        assert!(s.check(None, |pid| pid == 2).is_empty());
+        // In front, whatever the windows say.
+        for _ in 0..5 {
+            assert!(s.check(Some("Roblox"), |_| false).is_empty());
+        }
+        assert!(s.check(None, |_| false).is_empty());
+        assert_eq!(s.check(None, |_| false), vec![("Roblox".to_string(), 150)]);
+    }
+
+    #[test]
+    fn two_games_are_kept_apart() {
+        let mut s = Sessions::default();
+        s.started("A", 1);
+        s.started("B", 2);
+        s.add("A", 10);
+        s.add("B", 20);
+        s.check(None, |pid| pid == 1);
+        assert_eq!(s.check(None, |pid| pid == 1), vec![("B".to_string(), 20)]);
+        s.add("B", 99);
+        assert!(!s.is_empty());
+        s.clear();
+        assert!(s.is_empty());
     }
 
     #[test]

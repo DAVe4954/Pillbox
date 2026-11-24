@@ -12,7 +12,7 @@ use std::{
 
 use anyhow::{Context, Result, anyhow};
 use pillbox_core::{
-    music::{source_allowed, stable_hash},
+    music::{Candidate, pick_session, source_allowed, stable_hash},
     settings::SourceMode,
 };
 use windows::{
@@ -114,8 +114,10 @@ enum Msg {
     Sessions,
     /// Title, artist or artwork changed.
     Properties,
-    /// Play state or position changed.
-    Playback,
+    /// A session (shown or not) started, paused or stopped.
+    PlayState,
+    /// The position changed.
+    Position,
 }
 
 /// Handle to the media thread.
@@ -213,9 +215,48 @@ fn is_playing(session: &Session) -> bool {
         .is_ok_and(|s| s == PlaybackStatus::Playing)
 }
 
-/// Choose the session to show: Windows' current one if the filter allows it, otherwise the
-/// first allowed session, preferring one that is playing.
-fn pick(manager: &Manager, filter: &Filter) -> Option<(Session, String)> {
+/// Listens for the play state of every session, so a player that starts is noticed while
+/// another, paused one is shown.
+struct Watched(Vec<(Session, i64)>);
+
+impl Watched {
+    fn all(manager: &Manager, tx: &Sender<Msg>) -> Self {
+        let sessions = manager
+            .GetSessions()
+            .map(|s| s.into_iter().collect::<Vec<_>>())
+            .unwrap_or_default();
+        let watch = |s: Session| {
+            let tx = tx.clone();
+            let token = s
+                .PlaybackInfoChanged(&TypedEventHandler::new(move |_, _| {
+                    let _ = tx.send(Msg::PlayState);
+                    Ok(())
+                }))
+                .ok()?;
+            Some((s, token))
+        };
+        Self(sessions.into_iter().filter_map(watch).collect())
+    }
+}
+
+impl Drop for Watched {
+    fn drop(&mut self) {
+        for (session, token) in &self.0 {
+            let _ = session.RemovePlaybackInfoChanged(*token);
+        }
+    }
+}
+
+/// The session to show.
+struct Choice {
+    session: Session,
+    app_id: String,
+    /// It is the one shown already.
+    followed: bool,
+}
+
+/// Choose the session to show among those the filter allows: see `pick_session`.
+fn pick(manager: &Manager, filter: &Filter, followed: Option<&Session>) -> Option<Choice> {
     if !filter.enabled {
         return None;
     }
@@ -223,24 +264,71 @@ fn pick(manager: &Manager, filter: &Filter) -> Option<(Session, String)> {
         let id = s.SourceAppUserModelId().ok()?.to_string();
         source_allowed(filter.mode, &filter.apps, &id).then_some(id)
     };
-    if let Ok(current) = manager.GetCurrentSession()
-        && let Some(id) = allowed(&current)
-    {
-        return Some((current, id));
-    }
-    let sessions: Vec<Session> = manager.GetSessions().ok()?.into_iter().collect();
-    let mut candidates: Vec<(Session, String)> = sessions
+    let current = manager.GetCurrentSession().ok();
+    let mut sessions: Vec<Session> = manager
+        .GetSessions()
+        .map(|s| s.into_iter().collect())
+        .unwrap_or_default();
+    let current_at = match &current {
+        Some(c) => twin(c, &sessions).or_else(|| {
+            sessions.push(c.clone());
+            Some(sessions.len() - 1)
+        }),
+        None => None,
+    };
+    let followed_at = followed.and_then(|f| twin(f, &sessions));
+    let mut choices: Vec<(Session, String, Candidate)> = sessions
         .into_iter()
-        .filter_map(|s| allowed(&s).map(|id| (s, id)))
+        .enumerate()
+        .filter_map(|(i, s)| {
+            let id = allowed(&s)?;
+            let candidate = Candidate {
+                current: current_at == Some(i),
+                playing: is_playing(&s),
+                followed: followed_at == Some(i),
+            };
+            Some((s, id, candidate))
+        })
         .collect();
-    if candidates.is_empty() {
-        return None;
+    let candidates: Vec<Candidate> = choices.iter().map(|(_, _, c)| *c).collect();
+    tracing::debug!("media sessions: {candidates:?}");
+    let (session, app_id, chosen) = choices.swap_remove(pick_session(&candidates)?);
+    Some(Choice {
+        session,
+        app_id,
+        followed: chosen.followed,
+    })
+}
+
+/// Where in the list a session is. Windows makes new objects for the same sessions whenever the
+/// list changes, and hands out the current one as yet another object, so sessions are matched
+/// by app, play state and timeline; two of one app that agree in all of it are as good as the
+/// same.
+fn twin(session: &Session, sessions: &[Session]) -> Option<usize> {
+    if let Some(i) = sessions.iter().position(|s| s == session) {
+        return Some(i);
     }
-    let index = candidates
-        .iter()
-        .position(|(s, _)| is_playing(s))
-        .unwrap_or(0);
-    Some(candidates.swap_remove(index))
+    let id = |s: &Session| s.SourceAppUserModelId().ok();
+    let updated = |s: &Session| {
+        s.GetTimelineProperties()
+            .and_then(|t| t.LastUpdatedTime())
+            .map(|t| t.UniversalTime)
+            .ok()
+    };
+    let wanted = id(session)?;
+    let same_app: Vec<usize> = (0..sessions.len())
+        .filter(|i| id(&sessions[*i]).as_ref() == Some(&wanted))
+        .collect();
+    if same_app.len() > 1 {
+        let exact = same_app.iter().copied().find(|i| {
+            let s = &sessions[*i];
+            is_playing(s) == is_playing(session) && updated(s) == updated(session)
+        });
+        if exact.is_some() {
+            return exact;
+        }
+    }
+    same_app.first().copied()
 }
 
 fn bind(session: Session, app_id: String, tx: &Sender<Msg>) -> Result<Bound> {
@@ -251,11 +339,11 @@ fn bind(session: Session, app_id: String, tx: &Sender<Msg>) -> Result<Bound> {
             Ok(())
         }))?,
         session.PlaybackInfoChanged(&TypedEventHandler::new(move |_, _| {
-            let _ = t2.send(Msg::Playback);
+            let _ = t2.send(Msg::PlayState);
             Ok(())
         }))?,
         session.TimelinePropertiesChanged(&TypedEventHandler::new(move |_, _| {
-            let _ = t3.send(Msg::Playback);
+            let _ = t3.send(Msg::Position);
             Ok(())
         }))?,
     );
@@ -488,6 +576,7 @@ fn run(rx: Receiver<Msg>, tx: Sender<Msg>, out: &Sender<MediaUpdate>, waker: Wak
         apps: Vec::new(),
     };
     let mut bound: Option<Bound> = None;
+    let mut _watched = Watched(Vec::new());
     let mut cached = Cached::default();
     let mut had_track = false;
     let mut clear_art = false;
@@ -496,13 +585,15 @@ fn run(rx: Receiver<Msg>, tx: Sender<Msg>, out: &Sender<MediaUpdate>, waker: Wak
 
     while let Ok(first) = rx.recv() {
         // Events arrive in bursts; handle everything queued, then read the state once.
-        let (mut rebind, mut properties) = (false, false);
+        let (mut rebind, mut rewatch, mut properties) = (false, false, false);
         let mut next = Some(first);
         while let Some(msg) = next {
             match msg {
-                Msg::Sessions => rebind = true,
+                Msg::Sessions => (rebind, rewatch) = (true, true),
+                // The shown one may have paused while another plays, or the other way round.
+                Msg::PlayState => rebind = true,
                 Msg::Properties => properties = true,
-                Msg::Playback => {}
+                Msg::Position => {}
                 Msg::Command(MediaCommand::SetFilter {
                     enabled,
                     mode,
@@ -561,20 +652,31 @@ fn run(rx: Receiver<Msg>, tx: Sender<Msg>, out: &Sender<MediaUpdate>, waker: Wak
             }
             next = rx.try_recv().ok();
         }
+        if rewatch {
+            _watched = Watched::all(&manager, &tx);
+        }
         if rebind {
-            let wanted = pick(&manager, &filter);
-            let same = match (&bound, &wanted) {
-                (Some(b), Some((s, _))) => b.session == *s,
+            let wanted = pick(&manager, &filter, bound.as_ref().map(|b| &b.session));
+            let same_object = match (&bound, &wanted) {
+                (Some(b), Some(c)) => b.session == c.session,
                 (None, None) => true,
                 _ => false,
             };
-            if !same {
+            if !same_object {
+                let same_player = bound.is_some() && wanted.as_ref().is_some_and(|c| c.followed);
                 bound = None; // stop listening to the old session first
-                // The previous session's cover must not linger on the new one.
-                clear_art = cached.has_art;
-                cached = Cached::default();
-                if let Some((session, app_id)) = wanted {
-                    tracing::info!("following media session {app_id}");
+                if !same_player {
+                    // The previous session's cover must not linger on the new one.
+                    clear_art = cached.has_art;
+                    cached = Cached::default();
+                }
+                if let Some(Choice {
+                    session, app_id, ..
+                }) = wanted
+                {
+                    if !same_player {
+                        tracing::info!("following media session {app_id}");
+                    }
                     match bind(session, app_id, &tx) {
                         Ok(b) => bound = Some(b),
                         Err(e) => tracing::warn!("could not follow the session: {e:#}"),

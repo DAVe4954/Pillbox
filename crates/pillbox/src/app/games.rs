@@ -6,7 +6,7 @@ use std::time::Instant;
 use pillbox_core::{
     calendar,
     games::{self, Smooth},
-    playtime::{self, PlayLog},
+    playtime::{self, PlayLog, Sessions},
     settings::{GameBehavior, RuleBehavior, StripBackground},
 };
 
@@ -19,7 +19,7 @@ use crate::{
         info,
         system::{self, CpuMeter},
     },
-    scene::StripView,
+    scene::{StripView, Toast},
     store,
 };
 
@@ -27,6 +27,8 @@ use crate::{
 pub(super) struct Play {
     pub log: PlayLog,
     pub current: Option<(String, Instant)>,
+    /// Games running now, for the recap when one is quit (empty when the recap is off).
+    sessions: Sessions,
 }
 
 impl Play {
@@ -34,12 +36,21 @@ impl Play {
         let mut log: PlayLog = store::load_json("playtime.json");
         // Browsers and launcher helpers were counted before play time knew they are not games.
         log.remove_non_games();
-        Self { log, current: None }
+        Self {
+            log,
+            current: None,
+            sessions: Sessions::default(),
+        }
     }
 }
 
 pub(super) const TIMER_STRIP: usize = 30;
 pub(super) const TIMER_FULLSCREEN: usize = 31;
+/// While a game runs (in front or not): has it been quit? One look through the window list.
+pub(super) const TIMER_RECAP: usize = 32;
+const RECAP_CHECK_MS: u32 = 3000;
+/// How long the recap stays on the pill.
+const RECAP_MS: u32 = 7000;
 /// Strip refresh (CPU and RAM): ten times a second.
 const STRIP_MS: u32 = 100;
 /// Network speeds on the strip: twice a second (see sample_strip).
@@ -154,6 +165,10 @@ impl App {
         self.flush_play();
         if let Some(g) = &game {
             tracing::info!("play time: {g} started");
+            if self.settings.games.recap {
+                self.play.sessions.started(g, foreground::foreground_pid());
+                self.window.set_timer(TIMER_RECAP, RECAP_CHECK_MS);
+            }
         }
         self.play.current = game.map(|g| (g, Instant::now()));
         self.refresh_widgets(false);
@@ -173,10 +188,35 @@ impl App {
         *since += std::time::Duration::from_secs(seconds);
         let today = calendar::date_of(system::local_time());
         self.play.log.add(today, game, seconds);
+        self.play.sessions.add(game, seconds);
         if let Err(e) = store::save_json("playtime.json", &self.play.log) {
             tracing::warn!("play time not saved: {e:#}");
         }
     }
+
+    /// Games that were quit since the last look get their recap.
+    pub(super) fn check_recap(&mut self) {
+        if !self.settings.games.recap {
+            self.play.sessions.clear();
+        }
+        let front = self.play.current.as_ref().map(|(g, _)| g.as_str());
+        let quit = self.play.sessions.check(front, foreground::has_window);
+        if self.play.sessions.is_empty() {
+            self.window.kill_timer(TIMER_RECAP);
+        }
+        for (game, seconds) in quit {
+            self.show_recap(&game, seconds);
+        }
+    }
+
+    pub(super) fn show_recap(&mut self, game: &str, seconds: u64) {
+        tracing::info!("game quit: {game}, played {seconds} s");
+        if seconds >= playtime::RECAP_MIN_SECONDS && self.mode == Mode::Normal {
+            let text = playtime::recap_text(game, seconds);
+            self.show_toast(Toast::icon("\u{E7FC}", text), RECAP_MS);
+        }
+    }
+
     /// Re-check the foreground app and switch modes if needed.
     pub(super) fn refresh_mode(&mut self) {
         let mode = self.mode_for_foreground();
@@ -194,8 +234,11 @@ impl App {
         self.retarget();
         self.sync_visibility();
         self.sync_strip();
-        self.sync_drawers_for_mode();
         self.sync_notes_pause();
+        if mode == Mode::Normal {
+            // A battery that ran low during the game is said now.
+            self.check_power();
+        }
         self.dirty = true;
     }
 

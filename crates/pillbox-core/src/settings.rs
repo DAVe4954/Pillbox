@@ -7,6 +7,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::tabs::TabsSettings;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Style {
@@ -271,8 +273,6 @@ pub struct Hotkeys {
     pub screenshot: String,
     /// Copy the colour under the pointer as a hex code.
     pub color_picker: String,
-    /// Open or close the chat drawer.
-    pub chat_drawer: String,
 }
 
 impl Default for Hotkeys {
@@ -285,14 +285,13 @@ impl Default for Hotkeys {
             hide: "Ctrl+Alt+H".into(),
             screenshot: "Ctrl+Alt+S".into(),
             color_picker: "Ctrl+Alt+C".into(),
-            chat_drawer: "Ctrl+Alt+Shift+T".into(),
         }
     }
 }
 
 impl Hotkeys {
     /// Every shortcut with its settings key.
-    pub fn named(&self) -> [(&'static str, &str); 7] {
+    pub fn named(&self) -> [(&'static str, &str); 6] {
         [
             ("toggle_pillbox", &self.toggle_pillbox),
             ("play_pause", &self.play_pause),
@@ -300,11 +299,10 @@ impl Hotkeys {
             ("hide", &self.hide),
             ("screenshot", &self.screenshot),
             ("color_picker", &self.color_picker),
-            ("chat_drawer", &self.chat_drawer),
         ]
     }
 
-    fn named_mut(&mut self) -> [(&'static str, &mut String); 7] {
+    fn named_mut(&mut self) -> [(&'static str, &mut String); 6] {
         [
             ("toggle_pillbox", &mut self.toggle_pillbox),
             ("play_pause", &mut self.play_pause),
@@ -312,7 +310,6 @@ impl Hotkeys {
             ("hide", &mut self.hide),
             ("screenshot", &mut self.screenshot),
             ("color_picker", &mut self.color_picker),
-            ("chat_drawer", &mut self.chat_drawer),
         ]
     }
 }
@@ -748,11 +745,28 @@ impl Default for Music {
 pub struct Popups {
     /// Show a short note on Pillbox when Caps, Num or Scroll Lock changes.
     pub lock_keys: bool,
+    /// The charger was plugged in or pulled out, or the battery is full (laptops).
+    pub charging: bool,
+    /// The battery is down to 20% and 10% (laptops).
+    pub low_battery: bool,
+    /// Headphones were connected or disconnected: Bluetooth, USB or the jack.
+    pub headphones: bool,
+    /// A drive was plugged in or removed (USB sticks, memory cards).
+    pub drives: bool,
+    /// The internet connection was lost or is back.
+    pub internet: bool,
 }
 
 impl Default for Popups {
     fn default() -> Self {
-        Self { lock_keys: true }
+        Self {
+            lock_keys: true,
+            charging: true,
+            low_battery: true,
+            headphones: true,
+            drives: true,
+            internet: true,
+        }
     }
 }
 
@@ -818,6 +832,9 @@ pub struct ClipboardSettings {
     pub enabled: bool,
     /// Unpinned items beyond this are dropped, oldest first.
     pub max_items: u32,
+    /// Unpinned items older than this many days are deleted: one of `CLIP_KEEP_CHOICES`.
+    /// Pinned items and snippets stay.
+    pub keep_days: u32,
     /// Keep pictures (they take the most space).
     pub pictures: bool,
     /// Show the list in two columns.
@@ -834,6 +851,7 @@ impl Default for ClipboardSettings {
         Self {
             enabled: true,
             max_items: 200,
+            keep_days: CLIP_KEEP_DAYS,
             pictures: true,
             two_columns: false,
             snippets: Vec::new(),
@@ -842,8 +860,9 @@ impl Default for ClipboardSettings {
     }
 }
 
-/// Unpinned clipboard items older than this many days are deleted (pinned items and snippets
-/// stay). Fixed: copies often hold private text, so they never pile up.
+/// How long unpinned copies can be kept, in days. There is no "for ever": copies often hold
+/// private text, so they never pile up.
+pub const CLIP_KEEP_CHOICES: [u32; 4] = [1, 2, 7, 30];
 pub const CLIP_KEEP_DAYS: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1046,68 +1065,6 @@ impl Default for Widgets {
     }
 }
 
-/// Where the chat drawer's chat comes from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ChatSource {
-    #[default]
-    Twitch,
-    /// YouTube live chat; the channel field holds the live video's id.
-    #[serde(rename = "youtube")]
-    YouTube,
-}
-
-/// The chat drawer: a stream's chat page in a panel below Pillbox (WebView2).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Drawers {
-    /// Off by default: no page is loaded and the network is not touched.
-    pub chat_enabled: bool,
-    pub chat_source: ChatSource,
-    /// Twitch channel name, or the YouTube live video id.
-    pub chat_channel: String,
-    pub width: f32,
-    pub height: f32,
-    /// An open drawer stays open when a fullscreen game comes to the front.
-    pub over_games: bool,
-}
-
-impl Default for Drawers {
-    fn default() -> Self {
-        Self {
-            chat_enabled: false,
-            chat_source: ChatSource::Twitch,
-            chat_channel: String::new(),
-            width: 380.0,
-            height: 560.0,
-            over_games: true,
-        }
-    }
-}
-
-impl Drawers {
-    /// The page the chat drawer shows, if a channel is set.
-    pub fn chat_url(&self) -> Option<String> {
-        let channel = self.chat_channel.trim();
-        if channel.is_empty()
-            || !channel
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-        {
-            return None;
-        }
-        Some(match self.chat_source {
-            ChatSource::Twitch => format!(
-                "https://www.twitch.tv/popout/{}/chat?popout=",
-                channel.to_ascii_lowercase()
-            ),
-            ChatSource::YouTube => {
-                format!("https://www.youtube.com/live_chat?v={channel}&is_popout=1")
-            }
-        })
-    }
-}
-
 /// What Pillbox does while a fullscreen game is in front.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1143,6 +1100,8 @@ pub struct Games {
     pub strip_background: StripBackground,
     /// Small usage bars under CPU and RAM.
     pub usage_bars: bool,
+    /// When a game is quit, say on the pill how long it was played.
+    pub recap: bool,
     /// Executables never treated as games (in addition to the built-in list).
     pub ignore_apps: Vec<String>,
 }
@@ -1155,6 +1114,7 @@ impl Default for Games {
             every_fullscreen_app: false,
             strip_background: StripBackground::Surface,
             usage_bars: true,
+            recap: true,
             ignore_apps: Vec::new(),
         }
     }
@@ -1173,6 +1133,7 @@ pub struct AppRule {
 pub struct Settings {
     pub layout: Layout,
     pub behavior: Behavior,
+    pub tabs: TabsSettings,
     pub appearance: Appearance,
     pub weather: Weather,
     pub music: Music,
@@ -1185,7 +1146,6 @@ pub struct Settings {
     pub launcher: Launcher,
     pub widgets: Widgets,
     pub games: Games,
-    pub drawers: Drawers,
     pub phone: Phone,
     pub script: Script,
     pub notifications: Notifications,
@@ -1350,7 +1310,7 @@ fn replace_at(root: &mut Value, path: &[String], new: Value) -> Option<Value> {
 /// Settings that older versions wrote and this one no longer has. They are dropped without a
 /// warning (a file from an older version is not a mistake); `layout.height` first becomes
 /// `layout.size` (see `migrate`).
-pub const RETIRED: [&str; 9] = [
+pub const RETIRED: [&str; 16] = [
     "clipboard.expire_days",
     "layout.width",
     "layout.height",
@@ -1360,6 +1320,14 @@ pub const RETIRED: [&str; 9] = [
     "layout.tall_height",
     "behavior.fps",
     "phone.max_upload_mb",
+    // The chat drawer (removed after 0.1.3).
+    "hotkeys.chat_drawer",
+    "drawers.chat_enabled",
+    "drawers.chat_source",
+    "drawers.chat_channel",
+    "drawers.width",
+    "drawers.height",
+    "drawers.over_games",
 ];
 
 /// The pill height `layout.size` = 1 stands for, in DIPs (the old `layout.height` default).
@@ -1567,27 +1535,10 @@ impl Settings {
                 }
             }
         }
+        self.tabs.sanitize();
         tidy_names(&mut self.calls.ignore_apps);
         tidy_names(&mut self.clipboard.ignore_apps);
         tidy_names(&mut self.games.ignore_apps);
-        let dr = &mut self.drawers;
-        clamp(
-            "drawers.width",
-            &mut dr.width,
-            260.0,
-            900.0,
-            d.drawers.width,
-            warnings,
-        );
-        clamp(
-            "drawers.height",
-            &mut dr.height,
-            200.0,
-            1200.0,
-            d.drawers.height,
-            warnings,
-        );
-        dr.chat_channel = dr.chat_channel.trim().to_string();
         let ph = &mut self.phone;
         ph.code_minutes = ph.code_minutes.clamp(1, 30);
         ph.receive_folder = ph.receive_folder.trim().to_string();
@@ -1612,6 +1563,13 @@ impl Settings {
         });
         let c = &mut self.clipboard;
         c.max_items = c.max_items.clamp(10, 5000);
+        if !CLIP_KEEP_CHOICES.contains(&c.keep_days) {
+            warnings.push(format!(
+                "`clipboard.keep_days` = {} is not 1, 2, 7 or 30; using {CLIP_KEEP_DAYS}",
+                c.keep_days
+            ));
+            c.keep_days = CLIP_KEEP_DAYS;
+        }
         self.weather.place = self.weather.place.trim().to_string();
         self.layout.reveal.song_seconds = self.layout.reveal.song_seconds.clamp(2, 30);
         let ck = &mut self.appearance.clock;
@@ -2031,25 +1989,37 @@ mod tests {
     }
 
     #[test]
-    fn drawer_pages() {
-        let mut d = Drawers::default();
-        assert_eq!(d.chat_url(), None);
-        d.chat_channel = " SomeStreamer ".into();
-        assert_eq!(
-            d.chat_url().as_deref(),
-            Some("https://www.twitch.tv/popout/somestreamer/chat?popout=")
-        );
-        d.chat_source = ChatSource::YouTube;
-        d.chat_channel = "dQw4w9WgXcQ".into();
-        assert_eq!(
-            d.chat_url().as_deref(),
-            Some("https://www.youtube.com/live_chat?v=dQw4w9WgXcQ&is_popout=1")
-        );
-        d.chat_channel = "a/b?c".into();
-        assert_eq!(d.chat_url(), None, "only plain names and ids");
-        let (s, w) = parse(r#"{ "drawers": { "chat_source": "youtube" } }"#);
+    fn clipboard_keep_days_are_one_of_the_choices() {
+        assert_eq!(Settings::default().clipboard.keep_days, 2);
+        let (s, w) = parse(r#"{ "clipboard": { "keep_days": 30 } }"#);
         assert!(w.is_empty(), "{w:?}");
-        assert_eq!(s.drawers.chat_source, ChatSource::YouTube);
+        assert_eq!(s.clipboard.keep_days, 30);
+        let (s, w) = parse(r#"{ "clipboard": { "keep_days": 0 } }"#);
+        assert_eq!((s.clipboard.keep_days, w.len()), (2, 1));
+        // The old setting of another meaning stays retired.
+        let (s, w) = parse(r#"{ "clipboard": { "expire_days": 90 } }"#);
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!(s.clipboard.keep_days, 2);
+    }
+
+    #[test]
+    fn the_removed_chat_drawer_is_dropped_silently() {
+        let (s, w) = parse(
+            r#"{ "drawers": { "chat_enabled": true, "chat_source": "youtube", "width": 400 },
+                "hotkeys": { "chat_drawer": "Ctrl+Alt+Shift+T" } }"#,
+        );
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!(s, Settings::default());
+    }
+
+    #[test]
+    fn tabs_can_be_ordered_and_hidden() {
+        use crate::tabs::Tab;
+        let (s, w) = parse(r#"{ "tabs": { "order": ["music", "home"], "hidden": ["system"] } }"#);
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!(s.tabs.order[..2], [Tab::Music, Tab::Home]);
+        assert_eq!(s.tabs.order.len(), Tab::ALL.len());
+        assert!(s.tabs.is_hidden(Tab::System));
     }
 
     #[test]

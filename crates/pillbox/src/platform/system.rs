@@ -323,8 +323,8 @@ pub struct Monitor {
     /// The scale Pillbox is drawn at: the DPI scale (1.0 = 100%), times `layout.size` once
     /// the app has read it (see `app::read_monitor`).
     pub scale: f32,
-    /// The DPI scale alone, for windows that do not grow with Pillbox's size (the chat
-    /// drawer, the System window, popped-out widgets).
+    /// The DPI scale alone, for windows that do not grow with Pillbox's size (the
+    /// System window, popped-out widgets).
     pub dpi: f32,
     pub primary: bool,
     /// The HMONITOR value, for screen capture.

@@ -18,8 +18,6 @@ windows-registry = "0.5"
 windows-numerics = "0.2"
 windows-core = "0.61"
 ureq = "2"
-# WebView2 COM interfaces for the chat drawer (M5b). 0.38 is the last release on windows 0.61.
-webview2-com = "0.38"
 eframe = { version = "0.31", default-features = false, features = ["glow", "default_fonts"] }
 # M6 phone server (see README "Stack changes"): axum on a one-thread tokio runtime that exists
 # only while a QR code is on screen; tokio-util/futures-core stream files to the phone.
@@ -49,6 +47,7 @@ features = [
     "Media",
     "Media_Control",
     "Media_Ocr",
+    "Networking_Connectivity",
     "Storage_Streams",
     "Win32_Devices_Bluetooth",
     "Win32_Devices_Display",
@@ -102,5 +101,6 @@ features = [
     "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
     "Win32_UI_WindowsAndMessaging",
 ]

@@ -35,6 +35,36 @@ pub fn source_allowed(mode: SourceMode, apps: &[String], app_id: &str) -> bool {
     }
 }
 
+/// What is known about one media session when choosing which to show.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Candidate {
+    /// Windows calls this one the current session.
+    pub current: bool,
+    pub playing: bool,
+    /// Pillbox shows this one now.
+    pub followed: bool,
+}
+
+/// Which session to show. One that plays comes before any that is paused: Windows' current
+/// one first, then the one already shown, then any. With nothing playing the one already shown
+/// stays (so Play goes on with the song that was paused), or else Windows' current one.
+pub fn pick_session(sessions: &[Candidate]) -> Option<usize> {
+    let rank = |c: &Candidate| match (c.playing, c.current, c.followed) {
+        (true, true, _) => 0,
+        (true, false, true) => 1,
+        (true, false, false) => 2,
+        (false, _, true) => 3,
+        (false, true, false) => 4,
+        (false, false, false) => 5,
+    };
+    // The first of the best ones.
+    sessions
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, c)| rank(c))
+        .map(|(i, _)| i)
+}
+
 /// Music videos (mostly from browsers) run on a different clock from the album track, so
 /// synced lyrics would be off. Recognised by the usual title markers.
 pub fn looks_like_music_video(title: &str) -> bool {
@@ -807,6 +837,49 @@ mod tests {
             "chrome.exe"
         ));
         assert!(!source_allowed(SourceMode::Only, &[], "chrome.exe"));
+    }
+
+    #[test]
+    fn the_player_that_plays_is_shown() {
+        let c = |current, playing, followed| Candidate {
+            current,
+            playing,
+            followed,
+        };
+        assert_eq!(pick_session(&[]), None);
+        // A paused video is Windows' current session, Spotify plays: Spotify.
+        assert_eq!(
+            pick_session(&[c(true, false, true), c(false, true, false)]),
+            Some(1)
+        );
+        // Both play: Windows' choice.
+        assert_eq!(
+            pick_session(&[c(false, true, true), c(true, true, false)]),
+            Some(1)
+        );
+        // Two play and neither is current: the one already shown.
+        assert_eq!(
+            pick_session(&[
+                c(true, false, false),
+                c(false, true, false),
+                c(false, true, true)
+            ]),
+            Some(2)
+        );
+        // Spotify was paused and nothing else plays: it stays, so Play goes on with it.
+        assert_eq!(
+            pick_session(&[c(true, false, false), c(false, false, true)]),
+            Some(1)
+        );
+        // At the start with nothing playing: Windows' choice, else the first.
+        assert_eq!(
+            pick_session(&[c(false, false, false), c(true, false, false)]),
+            Some(1)
+        );
+        assert_eq!(
+            pick_session(&[c(false, false, false), c(false, false, false)]),
+            Some(0)
+        );
     }
 
     #[test]

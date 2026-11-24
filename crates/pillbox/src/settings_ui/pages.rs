@@ -5,12 +5,13 @@
 use eframe::egui::{self, Align2, Color32, CornerRadius, Pos2, Rect, Stroke, StrokeKind, Ui, vec2};
 use pillbox_core::{
     settings::{
-        AppRule, AppTheme, Appearance, CLOCK_SIZE_MAX, CLOCK_SIZE_MIN, ChatSource, ClockColor,
+        AppRule, AppTheme, Appearance, CLOCK_SIZE_MAX, CLOCK_SIZE_MIN, ClockColor,
         FADE_OPACITY_MIN, FADE_STOPS_MAX, FADE_STOPS_MIN, FadeStop, GameBehavior, LAUNCH_SLOTS,
         LaunchSlot, MusicReveal, NoteMode, NoteRule, PillClock, ProgressStyle, ReopenTab,
         RestingFace, RuleBehavior, SIZE_MAX, SIZE_MIN, Side, Snippet, SourceMode, StripBackground,
         Style, Surface, Visualizer, WeatherLook, WidgetKind,
     },
+    tabs::{Tab, TabsSettings},
     theme::{self, Theme},
 };
 
@@ -324,6 +325,61 @@ impl SettingsApp {
             },
         );
         s.row(
+            icon::BOLT,
+            "Charger",
+            "Plugged in, pulled out, or fully charged (laptops)",
+            "device notice battery charger charging unplugged full power",
+            |ui| {
+                toggle(ui, &mut pop.charging);
+            },
+        );
+        s.row(
+            icon::WARNING,
+            "Low battery",
+            "A notice at 20% and at 10% (laptops)",
+            "device notice battery empty power",
+            |ui| {
+                toggle(ui, &mut pop.low_battery);
+            },
+        );
+        s.row(
+            icon::HEADPHONES,
+            "Headphones",
+            "Connected or disconnected: Bluetooth, USB or the headphone jack",
+            "device notice headset earbuds bluetooth audio",
+            |ui| {
+                toggle(ui, &mut pop.headphones);
+            },
+        );
+        s.row(
+            icon::DRIVE,
+            "Drives",
+            "A USB stick, disk or memory card plugged in or removed",
+            "device notice usb stick disk sd card removed",
+            |ui| {
+                toggle(ui, &mut pop.drives);
+            },
+        );
+        s.row(
+            icon::GLOBE,
+            "Internet",
+            "The connection was lost, or is back. Reads Windows' own state; sends nothing",
+            "device notice network wifi offline online connection",
+            |ui| {
+                toggle(ui, &mut pop.internet);
+            },
+        );
+        let g = &mut self.draft.games;
+        s.row(
+            icon::GAME,
+            "Game recap",
+            "How long you played, when you quit a game",
+            "play time summary quit game",
+            |ui| {
+                toggle(ui, &mut g.recap);
+            },
+        );
+        s.row(
             icon::POWER,
             "Start-up greeting",
             "Slides in and says \"Pillbox is running\" after it starts, even when hidden",
@@ -613,6 +669,102 @@ impl SettingsApp {
                 slider(ui, &mut b.animation_speed, 0.5..=2.0, 0.05, |v| {
                     format!("{v:.2}×")
                 });
+            },
+        );
+        s.end();
+
+        self.tabs(ui, q);
+    }
+
+    /// The card's tabs: their order and which ones show.
+    fn tabs(&mut self, ui: &mut Ui, q: &str) {
+        let page = Page::General.title();
+        let music = self.draft.music.enabled;
+        let clipboard = self.draft.clipboard.enabled;
+        let script = self.draft.script.enabled;
+        let notes = self.draft.notifications.enabled;
+        // Why a tab that is switched on may still not be there.
+        let why = |tab: Tab| match tab {
+            Tab::Music if !music => "Music is off",
+            Tab::Clipboard if !clipboard => "Clipboard history is off",
+            Tab::Activity if !script => "Agents are off",
+            Tab::Activity => "Shows once an agent has connected",
+            Tab::Notifications if !notes => "Notifications are off",
+            _ => "",
+        };
+        let t = &mut self.draft.tabs;
+        let mut s = Section::new(ui, "Tabs", page, q);
+        s.block(
+            icon::LIST,
+            "Tabs on the card",
+            "In this order. Hiding a tab does not switch its feature off",
+            "tab order reorder hide show icons home music clipboard shelf reminders controls system activity notifications",
+            |ui| {
+                let mut step: Option<(usize, usize)> = None;
+                let count = t.order.len();
+                for (i, tab) in t.order.clone().into_iter().enumerate() {
+                    ui.horizontal(|ui| {
+                        let mut on = !t.is_hidden(tab);
+                        let ink = if on { TEXT } else { FAINT };
+                        let (rect, _) =
+                            ui.allocate_exact_size(vec2(26.0, 28.0), egui::Sense::hover());
+                        ui.painter().text(
+                            rect.center(),
+                            Align2::CENTER_CENTER,
+                            tab.icon(),
+                            icon_font(14.0),
+                            ink,
+                        );
+                        ui.label(
+                            egui::RichText::new(tab.name())
+                                .font(regular(13.5))
+                                .color(ink),
+                        );
+                        if on && !why(tab).is_empty() {
+                            ui.label(
+                                egui::RichText::new(why(tab))
+                                    .font(regular(12.0))
+                                    .color(FAINT),
+                            );
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if tab.can_hide() {
+                                if toggle(ui, &mut on) {
+                                    t.set_hidden(tab, !on);
+                                }
+                            } else {
+                                // Home always shows.
+                                toggle_enabled(ui, &mut on, false);
+                            }
+                            ui.add_space(8.0);
+                            // Both arrows keep their place; a missing one leaves its gap.
+                            let slot = 28.0 + ui.spacing().item_spacing.x;
+                            if i + 1 < count {
+                                if icon_button(ui, icon::DOWN, "Move down").clicked() {
+                                    step = Some((i, i + 1));
+                                }
+                            } else {
+                                ui.add_space(slot);
+                            }
+                            if i > 0 {
+                                if icon_button(ui, icon::UP, "Move up").clicked() {
+                                    step = Some((i, i - 1));
+                                }
+                            } else {
+                                ui.add_space(slot);
+                            }
+                        });
+                    });
+                }
+                if let Some((from, to)) = step {
+                    t.order.swap(from, to);
+                }
+                if *t != TabsSettings::default() {
+                    ui.add_space(4.0);
+                    if button(ui, icon::RESET, "Show all in the normal order").clicked() {
+                        *t = TabsSettings::default();
+                    }
+                }
             },
         );
         s.end();
@@ -1404,10 +1556,16 @@ impl SettingsApp {
         );
         s.row(
             icon::HISTORY,
-            "Copies are deleted after 2 days",
-            "For your privacy. Pin an item to keep it; snippets always stay",
-            "expire delete old privacy days",
-            |_| {},
+            "Delete copies after",
+            "Takes effect within a minute. Pinned items and snippets stay",
+            "expire delete old privacy days keep",
+            |ui| {
+                segmented(
+                    ui,
+                    &mut c.keep_days,
+                    &[(1, "1 day"), (2, "2 days"), (7, "7 days"), (30, "30 days")],
+                );
+            },
         );
         s.row(
             icon::PHOTO,
@@ -1823,79 +1981,6 @@ impl SettingsApp {
             },
         );
         s.end();
-
-        let d = &mut self.draft.drawers;
-        let mut s = Section::new(ui, "Chat drawer", page, q);
-        s.row(
-            icon::CHAT,
-            "Chat drawer",
-            "A stream's chat in a panel below Pillbox; loads Twitch or YouTube",
-            "twitch youtube stream drawer",
-            |ui| {
-                toggle(ui, &mut d.chat_enabled);
-            },
-        );
-        s.row(
-            icon::GLOBE,
-            "Chat from",
-            "Where the chat comes from",
-            "twitch youtube",
-            |ui| {
-                segmented(
-                    ui,
-                    &mut d.chat_source,
-                    &[
-                        (ChatSource::Twitch, "Twitch"),
-                        (ChatSource::YouTube, "YouTube live"),
-                    ],
-                );
-            },
-        );
-        let hint = match d.chat_source {
-            ChatSource::Twitch => "Channel name",
-            ChatSource::YouTube => "Live video id (after watch?v=)",
-        };
-        s.row(
-            icon::EDIT,
-            "Channel",
-            "The Twitch channel, or the YouTube live video id",
-            "streamer",
-            |ui| {
-                field(ui, &mut d.chat_channel, hint, 240.0);
-            },
-        );
-        s.row(
-            icon::FULLSCREEN,
-            "Drawer width",
-            "How wide the chat panel is",
-            "size",
-            |ui| {
-                slider(ui, &mut d.width, 260.0..=900.0, 10.0, |v| {
-                    format!("{v:.0} px")
-                });
-            },
-        );
-        s.row(
-            icon::FULLSCREEN,
-            "Drawer height",
-            "How tall the chat panel is",
-            "size",
-            |ui| {
-                slider(ui, &mut d.height, 200.0..=1200.0, 10.0, |v| {
-                    format!("{v:.0} px")
-                });
-            },
-        );
-        s.row(
-            icon::GAME,
-            "Keep it open over games",
-            "Otherwise it closes when a game comes to the front",
-            "fullscreen",
-            |ui| {
-                toggle(ui, &mut d.over_games);
-            },
-        );
-        s.end();
     }
 
     // ---- Agents -------------------------------------------------------------------------------
@@ -1907,7 +1992,7 @@ impl SettingsApp {
         s.row(
             icon::ROBOT,
             "Activity tab and script API",
-            "Local only (127.0.0.1) with a token; pillboxctl and agent hooks use it",
+            "The tab shows once an agent connects. Local only (127.0.0.1), with a token",
             "claude codex pillboxctl hooks status",
             |ui| {
                 toggle(ui, &mut sc.enabled);
@@ -2033,7 +2118,7 @@ impl SettingsApp {
         let page = Page::Shortcuts.title();
         let h = &mut self.draft.hotkeys;
         let mut s = Section::new(ui, "Global shortcuts", page, q);
-        let rows: [(&str, &str, &str, &mut String); 7] = [
+        let rows: [(&str, &str, &str, &mut String); 6] = [
             (
                 icon::FULLSCREEN,
                 "Open or close the card",
@@ -2050,7 +2135,6 @@ impl SettingsApp {
                 "color eyedropper",
                 &mut h.color_picker,
             ),
-            (icon::CHAT, "Chat drawer", "twitch", &mut h.chat_drawer),
         ];
         for (glyph, title, keys, value) in rows {
             s.row(

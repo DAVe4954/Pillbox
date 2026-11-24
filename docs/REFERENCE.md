@@ -282,8 +282,7 @@ Logs are rewritten on each start: `%LOCALAPPDATA%\Pillbox\pillbox.log` (Pillbox)
   in Settings.
 - **Controls tab:** speaker volume and mute, brightness (built-in panel via WMI, external
   monitors via DDC/CI), then two cards, **Wi-Fi** and **Bluetooth**, then tiles for the
-  microphone (mute), Windows' sound page, the camera mirror and (when switched on) the chat
-  drawer, the call line during a call, and six launcher slots with app icons.
+  microphone (mute), Windows' sound page and the camera mirror, the call line during a call, and six launcher slots with app icons.
   - *The cards:* the round switch on a card turns the radio on or off; its grey line says what
     is connected ("Home", "Headphones", "2 connected", "Off", "No Wi-Fi adapter").
     A click anywhere else on the card **expands** it: the card grows taller (the window is sized
@@ -451,14 +450,27 @@ Logs are rewritten on each start: `%LOCALAPPDATA%\Pillbox\pillbox.log` (Pillbox)
     a package identity or a consent prompt (see "M8 spike" below), but live change events do not,
     so a worker polls: every 3 seconds, and every second for 12 seconds after a change. A new
     notification shows on the pill up to 3 seconds after Windows shows it.
-- **Chat drawer (M5b, off by default):** a panel below Pillbox showing a Twitch / YouTube
-  live chat, in WebView2. Open and close it with Ctrl+Alt+Shift+T or the button on the Controls
-  tab. It appears without taking focus; click into the page to type. The header drags the
-  drawer; its ✕ closes it. It stays open over fullscreen games (setting). Logins and cookies are
-  kept in `%LOCALAPPDATA%\Pillbox\WebView2`. No page loads and no browser process runs until the
-  drawer is opened; closing it ends its browser processes. (A general web-page drawer existed in
-  M5b and was removed afterwards at the user's request; old `web_*` keys in a settings file are
-  ignored with a warning.)
+- **Device notices:** the charger plugged in or pulled out, a full battery (once per charge), a
+  low one (20% and 10%, each once until it is charged again), headphones connected or
+  disconnected (Bluetooth, USB or the jack), drives plugged in or removed (not network drives) and
+  the internet lost or back show on the pill for a few seconds. The battery is read when Windows reports a power change and once a minute;
+  headphones come from `IMMNotificationClient` (the list of usable ones is compared once nothing
+  has changed for 0.9 s), drives from `WM_DEVICECHANGE`, the internet from WinRT
+  `NetworkStatusChanged` (once the state has held for 4 s; Windows' own state is read, nothing is
+  sent), so nothing polls. During a game nothing shows; a
+  low battery is said when the game is over.
+- **Game recap:** while a game that play time counts is running, the window list is looked
+  through every 3 seconds. When the game has had no window for two looks it was quit, and the pill
+  says how long it was in front ("THE FINALS, 1 h 20 min"), if that was a minute or more. The game's
+  process is never opened for this. A game in front of another one swallows its recap.
+- **Tabs:** their order and which ones show are settings (`tabs`). A hidden tab still opens when
+  something asks for it: files dropped on the pill (Shelf), a ringing reminder, a click on a
+  notification or a flash. The Music tab goes with `music.enabled`; the Activity tab shows once an
+  agent or a script has reported (`data\agents_seen.json`) or Claude usage limits are on.
+- **Which player shows:** one that plays comes before a paused one; of several that play, Windows'
+  current one. With nothing playing the last one stays. (Until 0.1.3: always Windows' current one.)
+- **Chat drawer:** removed after 0.1.3; its settings are ignored silently. A PC where it was used
+  may still have `WebView2` and `WebView2Loader.dll` in `%LOCALAPPDATA%\Pillbox`; both can be deleted.
 - **Send to phone (M6):** hover a file on the Shelf tab and press the small phone button in its
   corner. A QR code replaces the shelf; scan it with the phone's camera (same network, no app or
   account). The page shows the file's name and size, a preview for pictures, and a Download
@@ -634,7 +646,12 @@ round), `behavior.fps` (shape changes always animate at 60 fps, `MOTION_FPS`) an
     "lyrics": false             // the lyrics column on the Music tab; off = lrclib.net is never contacted
   },
   "popups": {
-    "lock_keys": true           // Caps / Num / Scroll Lock notices
+    "lock_keys": true,          // Caps / Num / Scroll Lock notices
+    "charging": true,           // the charger was plugged in or pulled out, the battery is full
+    "low_battery": true,        // at 20% and 10%
+    "headphones": true,         // headphones were connected or disconnected
+    "drives": true,             // a drive was plugged in or removed
+    "internet": true            // the connection was lost or is back
   },
   "appearance": {
     "surface": "black",         // black | graphite | pure_black | acrylic | liquid_glass |
@@ -675,15 +692,14 @@ round), `behavior.fps` (shape changes always animate at 60 fps, `MOTION_FPS`) an
   },
   "hotkeys": {                  // "" = no shortcut; bad text keeps the default
     "toggle_pillbox": "Ctrl+Alt+N", "play_pause": "Ctrl+Alt+P", "mute_mic": "Ctrl+Alt+Shift+M",
-    "hide": "Ctrl+Alt+H", "screenshot": "Ctrl+Alt+S", "color_picker": "Ctrl+Alt+C",
-    "chat_drawer": "Ctrl+Alt+Shift+T"
+    "hide": "Ctrl+Alt+H", "screenshot": "Ctrl+Alt+S", "color_picker": "Ctrl+Alt+C"
   },
   "calls": { "call_timer": true, "sensor_dot": true, "ignore_apps": [] },
   "clipboard": {
     "enabled": true,            // off = the clipboard is never read
     "max_items": 200,           // 10..5000 unpinned items
-    "expire_days": 0,           // 0 (never) | 1 | 7 | 30: unpinned items older than this are dropped
-                                // (at start, on settings change, on each copy, when the tab opens)
+    "keep_days": 2,             // 1 | 2 | 7 | 30: unpinned items older than this are dropped
+                                // (every minute, on each copy, when the tab opens)
     "pictures": true,
     "two_columns": false,
     "snippets": [ { "name": "Address", "text": "..." } ],
@@ -720,15 +736,12 @@ round), `behavior.fps` (shape changes always animate at 60 fps, `MOTION_FPS`) an
     "every_fullscreen_app": false,  // true = browsers and video players count too
     "strip_background": "surface",  // "surface" | "numbers_only"
     "usage_bars": true,
+    "recap": true,             // say how long a game was played when it is quit
     "ignore_apps": []          // e.g. ["kodi.exe"]; never treated as games
   },
-  "drawers": {
-    "chat_enabled": false,      // off = no chat page is ever loaded
-    "chat_source": "twitch",    // "twitch" | "youtube"
-    "chat_channel": "",         // Twitch channel name, or the YouTube live video id
-    "width": 380,               // 260..900
-    "height": 560,              // 200..1200
-    "over_games": true          // an open drawer stays over a fullscreen game
+  "tabs": {
+    "order": ["home", "music", "clipboard", "shelf", "reminders", "controls", "system", "activity", "notifications"],
+    "hidden": []                // tabs left out of the card (home cannot be hidden)
   },
   "phone": {
     "enabled": true,            // off = no phone buttons, no server ever starts
@@ -783,9 +796,6 @@ Nothing by default. Two opt-in features use the network:
 - **City search** (Settings > Widgets > Weather > Location): only when Search is pressed, the
   Settings window sends the typed name (nothing else) to `geocoding-api.open-meteo.com` and
   shows up to six places. Picking one stores its coordinates; nothing is sent again.
-- **Chat drawer** (`drawers.chat_enabled`, off by default): only while the drawer is open,
-  WebView2 loads the `twitch.tv` / `youtube.com` chat page like a browser would, including
-  whatever that site loads.
 - **Phone transfer** (M6): nothing goes to the internet. While a QR code is on screen, a small
   HTTP server listens on **one** local-network address of this PC (never on all interfaces).
   How it is locked down:
@@ -894,7 +904,6 @@ Global (work in every app; rebind or clear them in Settings → Shortcuts):
 | Ctrl+Alt+H | Hide / show Pillbox |
 | Ctrl+Alt+S | Screenshot of the monitor under the pointer |
 | Ctrl+Alt+C | Copy the colour under the pointer as `#RRGGBB` |
-| Ctrl+Alt+Shift+T | Open / close the chat drawer |
 | (per slot) | Launcher slots, if you give them a shortcut |
 
 Accepted text: `Ctrl`, `Alt`, `Shift`, `Win` plus one key: letters, digits, `F1`..`F24`, `Space`,
@@ -908,8 +917,7 @@ default is now Ctrl+Alt+Shift+M.
 ## One-time permissions
 
 None for M1–M5 and M7. (M7: nothing to grant; to connect an agent you add its hooks yourself,
-see "Scripts and agents": `pillboxctl hooks claude --apply`.) The chat drawer needs the Microsoft Edge WebView2 Runtime, which Windows 11 has
-built in (the camera mirror needs "Let desktop apps access your camera" on, which is
+see "Scripts and agents": `pillboxctl hooks claude --apply`.) (The camera mirror needs "Let desktop apps access your camera" on, which is
 Windows' default). "Start with Windows" writes
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Pillbox` (no admin). Wi-Fi/Bluetooth
 switches, brightness, microphone mute and clipboard reading all work for a normal user.
@@ -990,8 +998,8 @@ Frame dumps exist because glass surfaces are invisible to screenshots.
 | `crates/pillbox-core/src/sysinfo.rs` | System card choices: busiest disk, GPU to show, connection in use (tested) |
 | `crates/Pillbox/src/platform/diskio.rs` | Disk activity (PDH `PhysicalDisk` counters) for the System card |
 | `spike-identity/` | M8 spike (throwaway): can an exe read notifications, with and without package identity |
-| `crates/Pillbox/src/platform/drawer.rs`, `app/drawers.rs` | Drawer window with WebView2; when drawers open and close |
-| `crates/Pillbox/vendor/WebView2Loader.dll` | Microsoft's WebView2 loader (x64, signed), embedded in the exe |
+| `crates/pillbox-core/src/tabs.rs`, `notices.rs` | The tabs and their order; when a device notice is due and what it says (tested) |
+| `crates/Pillbox/src/platform/headphones.rs`, `internet.rs` | Headphones that come and go (`IMMNotificationClient`); internet lost and back (`NetworkStatusChanged`) |
 | `crates/pillbox-core/src/phone.rs` | M6 logic (tested): picking the address, subnet/Host/token checks, safe file names, QR matrix, the phone pages |
 | `crates/Pillbox/src/phone.rs` | M6 phone server (axum on a one-thread tokio runtime, safe Rust) |
 | `crates/Pillbox/src/app/phone.rs` | When the QR code shows and closes; what Pillbox does with what arrives |
@@ -1030,7 +1038,7 @@ Frame dumps exist because glass surfaces are invisible to screenshots.
 - Size: `layout.size` multiplies the monitor's DPI scale into Pillbox's drawing scale
   (`shape::draw_scale`, `Monitor::scale`), so every shape, text and hit area grows together;
   `Monitor::dpi` keeps the plain DPI scale for the windows that do not grow with Pillbox
-  (chat drawer, System window, popped-out widgets).
+  (System window, popped-out widgets).
 - Per-app rules: `SetWinEventHook(EVENT_SYSTEM_FOREGROUND)`, so Windows tells us when the front
   app changes.
 - Now playing: WinRT `GlobalSystemMediaTransportControlsSessionManager` on its own thread;
@@ -1056,12 +1064,6 @@ Frame dumps exist because glass surfaces are invisible to screenshots.
   to RGB32, converted and mirrored on Media Foundation's thread, uploaded into one reused Direct2D
   bitmap. Desktop widgets: `WM_NCHITTEST` returns `HTCLIENT` over buttons and `HTCAPTION`
   elsewhere.
-- **New dependency (M5b): `webview2-com` 0.38** for the drawers. The spec named WebView2 for
-  embedded pages; writing its ~100 COM interfaces by hand would be far more unsafe code. 0.38 is
-  the last release built on `windows` 0.61, so the app still uses one `windows` version. Its
-  loader binding expects `WebView2Loader.dll` next to the exe, so the loader is embedded with
-  `include_bytes!`, written to `%LOCALAPPDATA%\Pillbox\` on first use and loaded by full path
-  (`LoadLibraryW` + `GetProcAddress`). The exe keeps running from any folder on its own.
 - Threads instead of an async runtime: the plan suggested `tokio`, but each background job here
   (media, audio, one-shot HTTP requests) is a simple blocking loop, so plain threads with
   channels do the job with less memory.
@@ -1218,9 +1220,6 @@ Frame dumps exist because glass surfaces are invisible to screenshots.
   reads, but it is not a mainstream app API; a driver may report 0 (then no temperature is
   shown). The "busiest adapter" is chosen from the 3D engine load, so on a hybrid laptop an idle
   desktop may show the integrated GPU.
-- **The chat drawer is a full browser.** An open drawer runs Microsoft Edge WebView2 processes
-  (hundreds of MB while open, none after closing). Sites may show their own consent screens
-  (Twitch does, once). A drawer you dragged is put back under Pillbox when settings change.
 - **The camera may open but send nothing** (privacy switch or shutter closed, camera held by
   another app). Some laptops instead send Windows' own "camera off" picture, which the mirror
   shows as it is. Only the first camera is used.

@@ -176,8 +176,6 @@ pub struct ControlsUi<'a> {
     pub mic_muted: Option<bool>,
     pub call: Option<CallView<'a>>,
     pub launcher: &'a [LaunchSlot],
-    /// Chat drawer: (switched on in Settings, open now).
-    pub chat_drawer: (bool, bool),
     /// The camera mirror is on: what to show in place of the controls.
     pub mirror: Option<MirrorUi<'a>>,
     pub links: LinksUi<'a>,

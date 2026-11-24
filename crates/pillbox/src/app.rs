@@ -12,11 +12,15 @@ use pillbox_core::{
     hotkey::Hotkey,
     image::{self, Bgra},
     music::{self, BANDS, GLOW_STOPS, Palette},
+    notices::{self, Power, PowerNotice, PowerWatch},
     settings::{
         ClockColor, MusicReveal, ReopenTab, RestingFace, Settings, Side,
         Visualizer as VisualizerStyle,
     },
-    shape::{Dims, MUSIC_TEXT, Pill, Placement, REST_TEXT, RegionKey, Resting},
+    shape::{
+        Dims, MUSIC_TEXT, NOTICE_LEAD, NOTICE_PAD, NOTICE_TEXT, Pill, Placement, REST_TEXT,
+        RegionKey, Resting,
+    },
     spring::{FixedStep, STEP, Spring, SpringParams},
     theme::{self, Rgba, Theme},
 };
@@ -30,6 +34,8 @@ use crate::{
         foreground::ForegroundHook,
         fullscreen::FullscreenApp,
         gfx::{ImageSlot, Renderer},
+        headphones::HeadphoneWatch,
+        internet::InternetWatch,
         media::{ArtUpdate, MediaCommand, MediaService, MediaUpdate, Track},
         screen,
         sensors::{InUse, SensorWatch},
@@ -49,11 +55,9 @@ const HK_MUTE: i32 = 3;
 const HK_HIDE: i32 = 4;
 const HK_SHOT: i32 = 5;
 const HK_COLOR: i32 = 6;
-// 7 was the web drawer (removed after M5).
-const HK_CHAT: i32 = 8;
+// 7 and 8 were the web drawer and the chat drawer (both removed).
 pub(crate) const LAUNCH_HOTKEY: i32 = 100;
 
-mod drawers;
 mod games;
 mod mirror;
 mod notes;
@@ -126,6 +130,15 @@ const AMBIENT_FPS: f64 = 30.0;
 const MOTION_FPS: f64 = 60.0;
 /// How long a lock-key notice stays up.
 const TOAST_MS: u32 = 1600;
+
+/// Device notice icons (Segoe Fluent Icons, the same in MDL2 Assets).
+const G_CHARGING: &str = "\u{E945}";
+const G_BATTERY: &str = "\u{E83F}";
+const G_DRIVE: &str = "\u{E88E}";
+const G_ONLINE: &str = "\u{E774}";
+const G_OFFLINE: &str = "\u{EB55}";
+const G_BATTERY_LOW: &str = "\u{E851}";
+const G_HEADPHONES: &str = "\u{E7F6}";
 
 /// The lock keys we announce: virtual-key code and name.
 const LOCK_KEYS: [(u16, &str); 3] = [
@@ -216,6 +229,9 @@ pub struct App {
     /// The second last drawn on the clock (with seconds on), to redraw only when it changes.
     clock_second: u8,
     tab: Tab,
+    /// A hidden tab that shows anyway (`summon_tab`): on the open card, and on the next one.
+    summoned: Option<Tab>,
+    summon_next: Option<Tab>,
     hits: Vec<Hit>,
     scrub: Option<Scrub>,
     // Notices on the resting pill.
@@ -230,6 +246,10 @@ pub struct App {
     shot_restore: Option<bool>,
     /// Files held on the shelf, newest first.
     shelf: Vec<PathBuf>,
+    // Device notices: the battery and headphones.
+    power: PowerWatch,
+    headphones: Option<HeadphoneWatch>,
+    internet: Option<InternetWatch>,
     // Microphone and camera.
     sensors: Option<SensorWatch>,
     in_use: InUse,
@@ -243,7 +263,6 @@ pub struct App {
     strip: Strip,
     mirror: mirror::Mirror,
     play: games::Play,
-    drawers: drawers::Drawers,
     /// M6: the QR code on screen and its server.
     phone: phone::Phone,
     /// M7: the script API, flashes and the Activity tab's board.
@@ -364,6 +383,8 @@ impl App {
             intro_until: None,
             clock_second: 0,
             tab: Tab::Home,
+            summoned: None,
+            summon_next: None,
             hits: Vec::new(),
             scrub: None,
             toast: None,
@@ -375,6 +396,9 @@ impl App {
             jobs_rx,
             shot_restore: None,
             shelf: store::load_json("shelf.json"),
+            power: PowerWatch::default(),
+            headphones: None,
+            internet: None,
             sensors: None,
             in_use: InUse::default(),
             call_since: None,
@@ -385,9 +409,8 @@ impl App {
             strip: Strip::default(),
             mirror: mirror::Mirror::default(),
             play: games::Play::load(),
-            drawers: drawers::Drawers::default(),
             phone: phone::Phone::default(),
-            script: script::Script::default(),
+            script: script::Script::load(),
             notes: notes::Notes::default(),
             quit_armed: false,
             shown_tab: Tab::Home,
@@ -430,6 +453,8 @@ impl App {
             app.set_in_use(InUse::default());
         }
         app.begin_intro();
+        app.check_power();
+        app.fake_notice();
         // Draw and shape the window before it becomes visible, so there is no flash.
         app.draw();
         app.sync_visibility();
@@ -528,8 +553,20 @@ impl App {
 
     /// The resting pill's size for what it shows now (see `Placement::resting`).
     fn resting_dims(&mut self) -> Dims {
-        let what = if self.toast.is_some() || self.note_stack_showing() || self.call_showing() {
-            Resting::Notice
+        let what = if let Some(toast) = &self.toast {
+            let h = self.placement.closed.h;
+            let look = self.text_look();
+            let text = if toast.icon.is_empty() && toast.swatch.is_none() {
+                self.renderer
+                    .measure(&toast.text, h * REST_TEXT * look.size, look.bold)
+                    + h
+            } else {
+                self.renderer.measure(&toast.text, h * NOTICE_TEXT, true)
+                    + h * (NOTICE_LEAD + NOTICE_PAD)
+            };
+            Resting::Notice { text }
+        } else if self.note_stack_showing() || self.call_showing() {
+            Resting::Notice { text: 0.0 }
         } else if self.resting_shows_song() {
             let art = self.art.is_some();
             let h = self.placement.closed.h;
@@ -763,12 +800,16 @@ impl App {
         // A half-done quit does not survive closing the card.
         self.quit_armed = false;
         if open {
-            if self.settings.behavior.reopen_tab == ReopenTab::Music && self.music_shown() {
+            // A tab something asked for wins over the tab the card usually opens on.
+            self.summoned = self.summon_next.take();
+            if self.summoned.is_none()
+                && self.settings.behavior.reopen_tab == ReopenTab::Music
+                && self.music_shown()
+                && self.tab_list().contains(&Tab::Music)
+            {
                 self.tab = Tab::Music;
             }
-            if !self.tab_list().contains(&self.tab) {
-                self.tab = Tab::Home;
-            }
+            self.leave_missing_tab();
             self.tab_shown();
         } else {
             self.scrub = None;
@@ -1012,6 +1053,126 @@ impl App {
         self.show_toast(Toast::text(format!("{} {state}", LOCK_KEYS[i].1)), TOAST_MS);
     }
 
+    // ---- device notices -------------------------------------------------------------------
+
+    /// Read the battery and announce what changed: the charger, a full or a low battery.
+    fn check_power(&mut self) {
+        let now = system::battery().map(|b| Power {
+            percent: b.percent,
+            plugged_in: b.plugged_in,
+        });
+        let quiet = self.mode != Mode::Normal;
+        if let Some(notice) = self.power.update(now, quiet) {
+            self.on_power_notice(notice);
+        }
+    }
+
+    fn on_power_notice(&mut self, notice: PowerNotice) {
+        let wanted = match notice {
+            PowerNotice::Charging(_) | PowerNotice::Unplugged(_) | PowerNotice::Full => {
+                self.settings.popups.charging
+            }
+            PowerNotice::Low(_) => self.settings.popups.low_battery,
+        };
+        if !wanted {
+            return;
+        }
+        let low = matches!(notice, PowerNotice::Low(_));
+        tracing::info!("device notice: {}", notice.text());
+        let (glyph, ms) = match notice {
+            PowerNotice::Low(_) => (G_BATTERY_LOW, 5000),
+            PowerNotice::Unplugged(_) | PowerNotice::Full => (G_BATTERY, 3000),
+            PowerNotice::Charging(_) => (G_CHARGING, 3000),
+        };
+        let toast = Toast {
+            alert: low,
+            ..Toast::icon(glyph, notice.text())
+        };
+        self.show_toast(toast, ms);
+    }
+
+    /// The watchers run only while their notices are wanted.
+    fn sync_device_watches(&mut self) {
+        let p = &self.settings.popups;
+        if !p.headphones {
+            self.headphones = None;
+        } else if self.headphones.is_none() {
+            self.headphones = HeadphoneWatch::start(self.window.waker());
+        }
+        if !p.internet {
+            self.internet = None;
+        } else if self.internet.is_none() {
+            self.internet = InternetWatch::start(self.window.waker());
+        }
+    }
+
+    /// A short notice about a device. Nothing shows while a game is in front.
+    fn device_notice(&mut self, toast: Toast, ms: u32) {
+        if self.mode == Mode::Normal {
+            self.show_toast(toast, ms);
+        }
+    }
+
+    fn on_headphones(&mut self, name: &str, connected: bool) {
+        let what = if connected {
+            "connected"
+        } else {
+            "disconnected"
+        };
+        tracing::info!("headphones {what}");
+        self.device_notice(Toast::icon(G_HEADPHONES, format!("{name} {what}")), 3000);
+    }
+
+    fn on_drives(&mut self, mask: u32, connected: bool) {
+        if !self.settings.popups.drives {
+            return;
+        }
+        if let Some(text) = notices::drive_text(&notices::drive_letters(mask), connected) {
+            tracing::info!("{text}");
+            self.device_notice(Toast::icon(G_DRIVE, text), 3000);
+        }
+    }
+
+    fn on_internet(&mut self, online: bool) {
+        tracing::info!("internet {}", if online { "back" } else { "lost" });
+        let toast = if online {
+            Toast::icon(G_ONLINE, "Back online")
+        } else {
+            Toast {
+                alert: true,
+                ..Toast::icon(G_OFFLINE, "No internet")
+            }
+        };
+        self.device_notice(toast, 4000);
+    }
+
+    /// Developer aid: `PILLBOX_FAKE_NOTICE` shows a device notice or a game recap at once:
+    /// `charging:63`, `unplugged:63`, `full`, `low:15`, `headphones:WH-1000XM4:on` (or `off`),
+    /// `drive:on`, `internet:off`, `recap:THE FINALS:4800`.
+    fn fake_notice(&mut self) {
+        let Ok(spec) = std::env::var("PILLBOX_FAKE_NOTICE") else {
+            return;
+        };
+        let (kind, rest) = spec.split_once(':').unwrap_or((spec.as_str(), ""));
+        match (kind, rest.rsplit_once(':')) {
+            ("charging", _) => {
+                self.on_power_notice(PowerNotice::Charging(rest.parse().unwrap_or(50)));
+            }
+            ("low", _) => self.on_power_notice(PowerNotice::Low(rest.parse().unwrap_or(10))),
+            ("unplugged", _) => {
+                self.on_power_notice(PowerNotice::Unplugged(rest.parse().unwrap_or(50)));
+            }
+            ("full", _) => self.on_power_notice(PowerNotice::Full),
+            ("headphones", Some((name, state))) => self.on_headphones(name, state == "on"),
+            ("drive", _) => self.on_drives(1 << 4, rest == "on"),
+            ("internet", _) => self.on_internet(rest == "on"),
+            ("recap", Some((game, seconds))) => {
+                self.show_recap(game, seconds.parse().unwrap_or(0));
+            }
+            _ => {}
+        }
+    }
+
     fn show_toast(&mut self, toast: Toast, ms: u32) {
         // Not a flash, unless `show_flash` says so right after.
         self.script.showing_flash = None;
@@ -1038,7 +1199,6 @@ impl App {
             (HK_HIDE, &h.hide),
             (HK_SHOT, &h.screenshot),
             (HK_COLOR, &h.color_picker),
-            (HK_CHAT, &h.chat_drawer),
         ]
         .into_iter()
         .map(|(id, text)| (id, text.clone()))
@@ -1108,7 +1268,6 @@ impl App {
             HK_HIDE => self.set_user_visible(!self.user_visible),
             HK_SHOT => self.begin_screenshot(),
             HK_COLOR => self.pick_color(),
-            HK_CHAT => self.toggle_chat_drawer(),
             id if id >= LAUNCH_HOTKEY => self.launch_slot((id - LAUNCH_HOTKEY) as usize),
             _ => {}
         }
@@ -1441,6 +1600,7 @@ impl App {
         );
         self.sync_music();
         self.sync_sensors();
+        self.sync_device_watches();
         self.sync_script();
         self.sync_notes();
         self.sync_system_window();
@@ -1480,7 +1640,7 @@ impl App {
         self.sync_timers();
         self.sync_fullscreen_timer();
         self.sync_services();
-        self.sync_drawers_for_settings();
+        self.leave_missing_tab();
         // The System refresh period may have changed.
         self.sync_stats_timer();
         self.dirty = true;
@@ -1613,8 +1773,6 @@ impl App {
             Event::WidgetResized(id) => self.on_widget_resized(id),
             Event::WidgetClose(id) => self.on_widget_close(id),
             Event::WidgetClick { id, x, y } => self.on_widget_click(id, x, y),
-            Event::DrawerClose(id) => self.on_drawer_close(id),
-            Event::DrawerResized(id) => self.on_drawer_resized(id),
             Event::MouseUp { x, y } => {
                 self.tools_mouse_up();
                 if let Some(scrub) = self.scrub.take() {
@@ -1641,7 +1799,9 @@ impl App {
                 if self.settings.appearance.resting_face == RestingFace::Battery {
                     self.dirty = true;
                 }
+                self.check_power();
             }
+            Event::Drives { mask, connected } => self.on_drives(mask, connected),
             Event::ForegroundChanged => {
                 // Windows can stack the newly active window above Pillbox (see
                 // `Window::raise`): put it back on top now, and once more a moment later in
@@ -1665,6 +1825,12 @@ impl App {
                 }
                 if let Some(state) = self.sensors.as_ref().and_then(SensorWatch::poll) {
                     self.set_in_use(state);
+                }
+                if let Some((name, on)) = self.headphones.as_ref().and_then(HeadphoneWatch::poll) {
+                    self.on_headphones(&name, on);
+                }
+                if let Some(online) = self.internet.as_ref().and_then(InternetWatch::poll) {
+                    self.on_internet(online);
                 }
                 self.poll_jobs();
                 self.poll_thumbs();
@@ -1752,9 +1918,11 @@ impl App {
                     TIMER_MINUTE,
                     face::ms_until_next_minute(system::local_time()),
                 );
+                // Windows does not report every percent.
+                self.check_power();
                 self.check_reminders();
                 self.count_screen_time();
-                // Clipboard copies go after two days even when nobody opens the tab.
+                // Old clipboard copies go even when nobody opens the tab.
                 self.expire_clips();
                 self.script_housekeeping();
                 self.flush_play();
@@ -1792,6 +1960,7 @@ impl App {
             notes::TIMER_NOTES => self.notes_stack_expired(),
             TIMER_STRIP => self.sample_strip(),
             TIMER_FULLSCREEN => self.refresh_mode(),
+            games::TIMER_RECAP => self.check_recap(),
             TIMER_FOCUS => self.on_focus_tick(),
             TIMER_CLIP_RETRY => {
                 self.window.kill_timer(TIMER_CLIP_RETRY);
@@ -2034,7 +2203,6 @@ impl App {
                 mic_muted: Some(self.mic_muted),
                 call,
                 launcher: &self.settings.launcher.slots,
-                chat_drawer: (self.settings.drawers.chat_enabled, self.drawers.is_open()),
                 mirror: self.mirror.on.then_some(crate::tabs::MirrorUi {
                     live: self.mirror.live,
                     message: &self.mirror.message,

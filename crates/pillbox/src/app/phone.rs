@@ -181,7 +181,7 @@ impl App {
             warning: None,
             network: (adapter.name.clone(), adapter.trusted),
         });
-        self.tab = Tab::Shelf;
+        self.summon_tab(Tab::Shelf);
         self.dirty = true;
     }
 

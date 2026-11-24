@@ -239,11 +239,9 @@ impl App {
 
     /// A click on the closed pill while notifications are stacked on it: open the list.
     pub(super) fn click_notes(&mut self) -> bool {
-        if self.open || !self.note_stack_showing() || !self.tab_list().contains(&Tab::Notifications)
-        {
+        if self.open || !self.note_stack_showing() || !self.summon_tab(Tab::Notifications) {
             return false;
         }
-        self.tab = Tab::Notifications;
         self.hovering = true;
         self.set_open(true);
         self.tab_shown();

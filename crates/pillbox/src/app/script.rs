@@ -26,6 +26,8 @@ pub(super) const TIMER_REPLY: usize = 50;
 /// While the Activity tab is open: is Claude still running?
 pub(super) const TIMER_PRESENCE: usize = 51;
 const PRESENCE_MS: u32 = 3000;
+/// Whether an agent or a script ever reported (see `Script::seen`).
+const SEEN_FILE: &str = "agents_seen.json";
 
 /// Keeps a console window from flashing up when Pillbox starts a helper program.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -40,6 +42,9 @@ struct Reply {
 pub(super) struct Script {
     server: Option<ScriptServer>,
     pub board: Board,
+    /// An agent or a script has reported to Pillbox at some time: the Activity tab shows.
+    /// Kept in `agents_seen.json`.
+    pub seen: bool,
     flashes: FlashQueue,
     /// Source of the flash on the pill right now ("" = it has none); `None` = no flash showing.
     pub showing_flash: Option<String>,
@@ -58,6 +63,15 @@ pub(super) struct Script {
     usage_ok: bool,
     /// Why the last account usage request gave no numbers ("Sign in to Claude again").
     pub usage_problem: Option<&'static str>,
+}
+
+impl Script {
+    pub fn load() -> Self {
+        Self {
+            seen: store::load_json(SEEN_FILE),
+            ..Self::default()
+        }
+    }
 }
 
 /// Account usage is asked for at most this often.
@@ -169,8 +183,33 @@ impl App {
         }
     }
 
+    /// The first report ever of an agent or a script: from now on the Activity tab shows.
+    fn note_agent_seen(&mut self) {
+        if self.script.seen {
+            return;
+        }
+        self.script.seen = true;
+        tracing::info!("first agent or script report: the Activity tab shows from now on");
+        if let Err(e) = store::save_json(SEEN_FILE, &true) {
+            tracing::warn!("agents_seen.json not saved: {e:#}");
+        }
+        // The tab row gets one more icon.
+        self.retarget();
+        self.dirty = true;
+    }
+
     fn on_command(&mut self, cmd: Command, reply: Option<oneshot::Sender<bool>>) {
         let now = now_ms();
+        let hidden = &self.settings.script.hidden_agents;
+        let reports = match &cmd {
+            Command::Flash(_) => false,
+            Command::Status(_) => true,
+            Command::Statusline(agent, _) => !hidden.contains(agent),
+            Command::Agent(u) => !hidden.contains(&u.agent),
+        };
+        if reports {
+            self.note_agent_seen();
+        }
         match cmd {
             Command::Flash(f) => self.on_flash(f),
             Command::Status(r) => {
@@ -350,10 +389,9 @@ impl App {
             self.open_claude_app();
             return true;
         }
-        if !self.tab_list().contains(&Tab::Activity) {
+        if !self.summon_tab(Tab::Activity) {
             return false;
         }
-        self.tab = Tab::Activity;
         self.hovering = true;
         self.set_open(true);
         self.tab_shown();

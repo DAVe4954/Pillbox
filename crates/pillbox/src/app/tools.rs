@@ -426,7 +426,7 @@ impl App {
         let removed = self
             .t
             .clip
-            .expire(unix_now(), pillbox_core::settings::CLIP_KEEP_DAYS);
+            .expire(unix_now(), self.settings.clipboard.keep_days);
         if !removed.is_empty() {
             tracing::info!("{} clipboard items expired", removed.len());
             self.forget_pictures(&removed);
@@ -437,18 +437,47 @@ impl App {
 
     /// Tabs shown in the card, in order.
     pub(super) fn tab_list(&self) -> Vec<Tab> {
-        let mut tabs = vec![Tab::Home, Tab::Music];
-        if self.settings.clipboard.enabled {
-            tabs.push(Tab::Clipboard);
+        self.settings
+            .tabs
+            .shown(|t| self.tab_available(t), self.summoned)
+    }
+
+    /// Whether what a tab shows is there at all (the user may still have hidden the tab).
+    fn tab_available(&self, tab: Tab) -> bool {
+        let s = &self.settings;
+        match tab {
+            Tab::Music => s.music.enabled,
+            Tab::Clipboard => s.clipboard.enabled,
+            // Empty for everyone without an agent, so it waits for the first one.
+            Tab::Activity => {
+                s.script.enabled && (self.script.seen || s.script.claude_account_usage)
+            }
+            Tab::Notifications => s.notifications.enabled,
+            _ => true,
         }
-        tabs.extend([Tab::Shelf, Tab::Reminders, Tab::Controls, Tab::System]);
-        if self.settings.script.enabled {
-            tabs.push(Tab::Activity);
+    }
+
+    /// Go to a tab because something asked for it (files dropped on the pill, a reminder, a
+    /// click on a notification): it shows even if the user hid it, until the card is opened
+    /// again. `false` if its feature is off.
+    pub(super) fn summon_tab(&mut self, tab: Tab) -> bool {
+        if !self.tab_available(tab) {
+            return false;
         }
-        if self.settings.notifications.enabled {
-            tabs.push(Tab::Notifications);
+        self.tab = tab;
+        if self.open {
+            self.summoned = Some(tab);
+        } else {
+            self.summon_next = Some(tab);
         }
-        tabs
+        true
+    }
+
+    /// The tabs changed (settings, a feature switched off): leave one that is gone.
+    pub(super) fn leave_missing_tab(&mut self) {
+        if !self.tab_list().contains(&self.tab) {
+            self.tab = Tab::Home;
+        }
     }
 
     /// A tab came into view: load what it shows.
@@ -1097,7 +1126,6 @@ impl App {
                 }
             }
             Action::Mirror => self.toggle_mirror(),
-            Action::ChatDrawer => self.toggle_chat_drawer(),
             Action::Launch(i) => self.launch_slot(i),
             Action::OpenSettings => super::open_settings_window(),
             Action::Widget(w) => self.widget_action(w),
@@ -1458,7 +1486,7 @@ impl App {
         removed.extend(
             self.t
                 .clip
-                .expire(unix_now(), pillbox_core::settings::CLIP_KEEP_DAYS),
+                .expire(unix_now(), self.settings.clipboard.keep_days),
         );
         self.forget_pictures(&removed);
         self.save_clip_index();
@@ -1682,7 +1710,7 @@ impl App {
         if self.mode != super::Mode::Normal {
             return;
         }
-        self.tab = Tab::Shelf;
+        self.summon_tab(Tab::Shelf);
         self.hovering = true;
         self.window.kill_timer(super::TIMER_CLOSE);
         self.set_open(true);
@@ -1781,7 +1809,7 @@ impl App {
         if !self.user_visible {
             self.set_user_visible(true);
         }
-        self.tab = Tab::Reminders;
+        self.summon_tab(Tab::Reminders);
         self.t.scroll.insert(Tab::Reminders, 0.0);
         self.hovering = true;
         self.window.kill_timer(super::TIMER_CLOSE);
@@ -2621,7 +2649,6 @@ impl App {
                 mic_muted: None,
                 call: None,
                 launcher: &[],
-                chat_drawer: (false, false),
                 mirror: None,
                 links: crate::tabs::LinksUi::EMPTY,
             },

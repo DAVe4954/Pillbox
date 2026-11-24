@@ -11,9 +11,9 @@ use pillbox_core::{
 };
 
 use super::{
-    AMBER, Ctx, G_ADD, G_APP, G_BLUETOOTH, G_BRIGHTNESS, G_CAMERA, G_CHAT, G_MIC, G_MIC_OFF,
-    G_MUTED, G_PHONE, G_SOUND, G_VOLUME, G_WIFI, RED, Scroller, button, file_thumb_key,
-    icon_button, mirror, note, push_clipped, rounded, slider,
+    AMBER, Ctx, G_ADD, G_APP, G_BLUETOOTH, G_BRIGHTNESS, G_CAMERA, G_MIC, G_MIC_OFF, G_MUTED,
+    G_PHONE, G_SOUND, G_VOLUME, G_WIFI, RED, Scroller, button, file_thumb_key, icon_button, mirror,
+    note, push_clipped, rounded, slider,
 };
 use crate::{
     platform::gfx::{Align, Frame, ImageSlot},
@@ -575,7 +575,7 @@ fn signal(f: &mut Frame<'_>, cx: &Ctx<'_>, (x, y): (f32, f32), lit: u8, connecte
 
 // ---- tiles, call line, launcher --------------------------------------------------------------
 
-/// The microphone, sound settings, mirror and chat drawer tiles in one row. Returns its bottom.
+/// The microphone, sound settings, and mirror tiles in one row. Returns its bottom.
 fn quick_tiles(
     f: &mut Frame<'_>,
     cx: &Ctx<'_>,
@@ -585,8 +585,7 @@ fn quick_tiles(
     let k = cx.k;
     let c = &cx.ui.controls;
     let muted = c.mic_muted == Some(true);
-    let (chat_on, chat_open) = c.chat_drawer;
-    let mut tiles: Vec<(&str, &str, bool, Rgba, Action)> = vec![
+    let tiles: Vec<(&str, &str, bool, Rgba, Action)> = vec![
         (
             if muted { G_MIC_OFF } else { G_MIC },
             if muted { "Mic muted" } else { "Mic on" },
@@ -601,15 +600,6 @@ fn quick_tiles(
         (G_SOUND, "Sound", false, cx.text(), Action::SoundSettings),
         (G_CAMERA, "Mirror", false, cx.text(), Action::Mirror),
     ];
-    if chat_on {
-        tiles.push((
-            G_CHAT,
-            "Chat",
-            chat_open,
-            cx.on_accent(),
-            Action::ChatDrawer,
-        ));
-    }
     let gap = 6.0 * k;
     let h = 38.0 * k;
     let w = (cr - cl - gap * (tiles.len() as f32 - 1.0)) / tiles.len() as f32;

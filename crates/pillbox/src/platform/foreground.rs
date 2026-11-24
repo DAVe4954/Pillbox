@@ -138,6 +138,43 @@ pub fn process_running(exe: &str) -> bool {
     found
 }
 
+/// The process that owns the window in front, or 0.
+pub fn foreground_pid() -> u32 {
+    let mut pid = 0u32;
+    // SAFETY: the out-pointer is a valid local; a null hwnd simply yields pid 0.
+    unsafe { GetWindowThreadProcessId(GetForegroundWindow(), Some(&mut pid)) };
+    pid
+}
+
+extern "system" fn find_window_of(hwnd: HWND, data: LPARAM) -> BOOL {
+    // SAFETY: `data` is the address of the pair in `has_window`, alive for the enumeration.
+    let (pid, found) = unsafe { &mut *(data.0 as *mut (u32, bool)) };
+    let mut owner = 0u32;
+    // SAFETY: hwnd comes from the enumeration; the out-pointer is a valid local.
+    let visible = unsafe {
+        GetWindowThreadProcessId(hwnd, Some(&mut owner));
+        IsWindowVisible(hwnd).as_bool()
+    };
+    *found = owner == *pid && visible;
+    // Stop at the first one.
+    BOOL::from(!*found)
+}
+
+/// Whether a process has a window that is shown (a minimised one counts). Only window lists
+/// are read: the process itself is never opened.
+pub fn has_window(pid: u32) -> bool {
+    let mut search = (pid, false);
+    // SAFETY: the callback only uses the pointer during this call; see find_window_of.
+    unsafe {
+        // Stopping early makes this return an error, which means nothing here.
+        let _ = EnumWindows(
+            Some(find_window_of),
+            LPARAM(&mut search as *mut (u32, bool) as isize),
+        );
+    }
+    search.1
+}
+
 /// The executable currently in the foreground, e.g. `chrome.exe`.
 pub fn foreground_exe() -> Option<String> {
     // SAFETY: no arguments; may return a null handle, which exe_of handles.

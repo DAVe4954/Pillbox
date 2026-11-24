@@ -9,9 +9,11 @@ use pillbox_core::{
     face::{PET_HEIGHT, PET_WIDTH, PetPixel, pet_pixels},
     music::{BANDS, GLOW_STOPS, Palette, format_clock},
     settings::{Music, ProgressStyle, Side, Visualizer},
-    shape::Pill,
+    shape::{NOTICE_LEAD, NOTICE_PAD, NOTICE_TEXT, Pill},
     theme::{Rgba, Theme, Touch},
 };
+
+pub use pillbox_core::tabs::Tab;
 
 use crate::{
     lyrics::LyricsState,
@@ -26,58 +28,6 @@ pub enum Face {
     Empty,
     Text(String),
     Pet { blink: bool },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Tab {
-    Home,
-    Music,
-    Clipboard,
-    Shelf,
-    Reminders,
-    Controls,
-    /// M7: coding agents and live statuses from scripts.
-    Activity,
-    /// CPU, GPU, RAM, disk, network and battery, one card each, on a wide card.
-    System,
-    /// M8: Windows toast notifications mirrored on Pillbox.
-    Notifications,
-}
-
-impl Tab {
-    pub fn name(self) -> &'static str {
-        match self {
-            Tab::Home => "Home",
-            Tab::Music => "Music",
-            Tab::Clipboard => "Clipboard",
-            Tab::Shelf => "Shelf",
-            Tab::Reminders => "Reminders",
-            Tab::Controls => "Controls",
-            Tab::Activity => "Activity",
-            Tab::Notifications => "Notifications",
-            Tab::System => "System",
-        }
-    }
-
-    /// Segoe Fluent Icons glyph.
-    pub fn icon(self) -> &'static str {
-        match self {
-            Tab::Home => "\u{E80F}",
-            Tab::Music => "\u{E8D6}",
-            Tab::Clipboard => "\u{E77F}",
-            Tab::Shelf => "\u{E7B8}",
-            Tab::Reminders => "\u{EA8F}",
-            Tab::Controls => "\u{E9E9}",
-            Tab::Activity => "\u{E9D9}",
-            Tab::Notifications => "\u{E8BD}",
-            Tab::System => "\u{E950}",
-        }
-    }
-
-    /// List tabs use the taller card.
-    pub fn tall(self) -> bool {
-        !matches!(self, Tab::Music | Tab::System)
-    }
 }
 
 /// Text boxes in the card. Only one has the keyboard at a time.
@@ -193,8 +143,6 @@ pub enum Action {
     LinkSettings(LinkPanel),
     /// Turn the camera mirror on or off.
     Mirror,
-    /// Open or close the chat drawer.
-    ChatDrawer,
     Launch(usize),
     OpenSettings,
     Widget(WidgetAction),
@@ -882,14 +830,19 @@ fn paint_toast(f: &mut Frame<'_>, s: &Scene<'_>, toast: &Toast, rect: Rect, alph
             icon(h * 0.42, color.fade(alpha)),
         );
     }
-    let pad = h * 0.3;
+    // As wide as `app::resting_dims` made the pill for it.
     f.text(
         &toast.text,
-        cx + lead * 0.6,
+        l + h * NOTICE_LEAD,
         t,
-        r - pad,
+        r - h * NOTICE_PAD * 0.7,
         b,
-        label(h * 0.38, true, s.theme.text.fade(alpha), Align::Center),
+        label(
+            h * NOTICE_TEXT,
+            true,
+            s.theme.text.fade(alpha),
+            Align::Center,
+        ),
     );
 }
 

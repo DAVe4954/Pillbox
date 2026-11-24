@@ -32,7 +32,6 @@ out.push('Pillbox is built with the open-source libraries listed below. Each is 
 out.push('own licence, all of which allow free and commercial use. Their licence texts follow.');
 out.push('');
 out.push('Also used, not built in:');
-out.push('- WebView2Loader.dll (Microsoft), redistributed under the Microsoft WebView2 SDK licence.');
 out.push('- Weather, air quality and place search: Open-Meteo.com, data under CC BY 4.0.');
 out.push('- Currency rates: Frankfurter (frankfurter.app), data from the European Central Bank.');
 out.push('- Lyrics (only when switched on): LRCLIB (lrclib.net).');

@@ -32,18 +32,19 @@ use windows::{
                 RIM_TYPEKEYBOARD, RegisterRawInputDevices,
             },
             WindowsAndMessaging::{
-                CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
-                GetForegroundWindow, GetWindowThreadProcessId, HWND_TOPMOST, IDC_ARROW, IsWindow,
-                IsWindowVisible, KillTimer, LoadCursorW, MA_NOACTIVATE, MSG,
+                CreateWindowExW, DBT_DEVICEARRIVAL, DBT_DEVICEREMOVECOMPLETE, DBT_DEVTYP_VOLUME,
+                DBTF_NET, DEV_BROADCAST_HDR, DEV_BROADCAST_VOLUME, DefWindowProcW, DestroyWindow,
+                DispatchMessageW, GetForegroundWindow, GetWindowThreadProcessId, HWND_TOPMOST,
+                IDC_ARROW, IsWindow, IsWindowVisible, KillTimer, LoadCursorW, MA_NOACTIVATE, MSG,
                 MsgWaitForMultipleObjects, PM_REMOVE, PeekMessageW, PostMessageW, PostQuitMessage,
                 QS_ALLINPUT, RegisterClassW, SW_HIDE, SW_SHOWNOACTIVATE, SWP_NOACTIVATE,
                 SetForegroundWindow, SetTimer, SetWindowDisplayAffinity, SetWindowPos, ShowWindow,
                 TranslateMessage, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WM_APP, WM_CHAR,
-                WM_CLIPBOARDUPDATE, WM_DESTROY, WM_DISPLAYCHANGE, WM_DPICHANGED, WM_HOTKEY,
-                WM_INPUT, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEACTIVATE,
-                WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_POWERBROADCAST, WM_QUIT, WM_RBUTTONUP,
-                WM_SETTINGCHANGE, WM_TIMER, WNDCLASSW, WS_EX_NOACTIVATE, WS_EX_NOREDIRECTIONBITMAP,
-                WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
+                WM_CLIPBOARDUPDATE, WM_DESTROY, WM_DEVICECHANGE, WM_DISPLAYCHANGE, WM_DPICHANGED,
+                WM_HOTKEY, WM_INPUT, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP,
+                WM_MOUSEACTIVATE, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_POWERBROADCAST, WM_QUIT,
+                WM_RBUTTONUP, WM_SETTINGCHANGE, WM_TIMER, WNDCLASSW, WS_EX_NOACTIVATE,
+                WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
             },
         },
     },
@@ -107,6 +108,11 @@ pub enum Event {
     DisplayChanged,
     /// Battery level or power source changed.
     PowerChanged,
+    /// Drives were plugged in or removed: Windows' bit mask of their letters.
+    Drives {
+        mask: u32,
+        connected: bool,
+    },
     /// A different app came to the front.
     ForegroundChanged,
     /// A new capture frame of the screen behind Pillbox is waiting.
@@ -150,10 +156,6 @@ pub enum Event {
         x: f32,
         y: f32,
     },
-    /// A drawer's close button was clicked (its window id).
-    DrawerClose(isize),
-    /// A drawer window was moved or resized (its window id).
-    DrawerResized(isize),
     Tray(TrayCommand),
 }
 
@@ -292,6 +294,35 @@ pub(super) fn give_back_keyboard_for(from: &mut Option<isize>) {
     tracing::debug!("keyboard given back to {raw:#x}: {ok}");
 }
 
+/// Drives plugged in or removed, from `WM_DEVICECHANGE`. Network drives do not count.
+fn drive_event(what: u32, lp: LPARAM) -> Option<Event> {
+    let connected = match what {
+        DBT_DEVICEARRIVAL => true,
+        DBT_DEVICEREMOVECOMPLETE => false,
+        _ => return None,
+    };
+    let header = lp.0 as *const DEV_BROADCAST_HDR;
+    if header.is_null() {
+        return None;
+    }
+    // SAFETY: for these two codes Windows passes a DEV_BROADCAST_HDR that is valid during the
+    // message; the larger structure is read only when its type and size say it is there.
+    let volume = unsafe {
+        let h = header.read_unaligned();
+        if h.dbch_devicetype != DBT_DEVTYP_VOLUME
+            || (h.dbch_size as usize) < size_of::<DEV_BROADCAST_VOLUME>()
+        {
+            return None;
+        }
+        (lp.0 as *const DEV_BROADCAST_VOLUME).read_unaligned()
+    };
+    let network = volume.dbcv_flags.0 & DBTF_NET.0 != 0;
+    (!network).then_some(Event::Drives {
+        mask: volume.dbcv_unitmask,
+        connected,
+    })
+}
+
 extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     match msg {
         // A click must never activate Pillbox or take focus from the app being used.
@@ -407,6 +438,12 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRES
         }
         WM_POWERBROADCAST => {
             push_event(Event::PowerChanged);
+            LRESULT(1)
+        }
+        WM_DEVICECHANGE => {
+            if let Some(event) = drive_event(wp.0 as u32, lp) {
+                push_event(event);
+            }
             LRESULT(1)
         }
         WM_APP_BACKDROP => {

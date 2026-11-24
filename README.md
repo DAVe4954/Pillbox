@@ -62,6 +62,7 @@ Pillbox never opens a window of its own and has no taskbar button; it lives in t
 - **Open it:** rest the mouse pointer on the pill (or press **Ctrl+Alt+N**). It opens into a card with a row of icons on top, one per tab.
 - **Close it:** move the mouse away, or press **Ctrl+Alt+N** again.
 - **Switch tabs:** click an icon, or scroll the mouse wheel while the pointer is on the row of icons.
+- **Choose your tabs:** Settings > General > Tabs sets their order and hides the ones you do not use.
 - **Settings:** the gear at the right end of the icon row, or the tray icon menu.
 - **Quit:** the small **X** at the right end of the icon row (click it twice to confirm), or the tray menu.
 - **Hide it for a while:** **Ctrl+Alt+H**, or the tray menu. Pillbox also gets out of the way by itself when you play a game full screen (you choose what it does then; see [Games](#games)).
@@ -69,7 +70,7 @@ Pillbox never opens a window of its own and has no taskbar button; it lives in t
 
 ### The closed pill
 
-The closed pill is not just a clock. It shows the time, or a tiny music player (title, a live equalizer, the cover colours), or a short notice: microphone muted, Caps Lock on, a call timer, a screenshot saved, a reminder ringing, a new notification.
+The closed pill is not just a clock. It shows the time, or a tiny music player (title, a live equalizer, the cover colours), or a short notice: microphone muted, Caps Lock on, a call timer, a screenshot saved, a reminder ringing, a new notification, the charger plugged in or pulled out, a full or low battery (at 20% and 10%), headphones connected or disconnected, a drive plugged in or removed, the internet lost or back. When you quit a game it says how long you played ("THE FINALS, 1 h 20 min"). Each of these can be switched off in Settings > Closed pill.
 
 <p align="center"><img src="docs/images/pill-states.png" alt="Three closed-pill states: the time, the notice Pillbox is running, and a song title with an equalizer" width="270"></p>
 
@@ -99,7 +100,7 @@ Drag a widget out with its small corner button and it **pops out onto the deskto
 
 ### Music
 
-Shows what is playing in **any** player (Spotify, YouTube in a browser, VLC...): cover, title, artist, a progress bar you can click or drag, previous, play/pause, next. Five progress-bar looks (line, bar, dots, wave, segments) and a live equalizer in the pill.
+Shows what is playing in **any** player (Spotify, YouTube in a browser, VLC...; with several open, the one that is actually playing): cover, title, artist, a progress bar you can click or drag, previous, play/pause, next. Five progress-bar looks (line, bar, dots, wave, segments) and a live equalizer in the pill.
 
 <p align="center"><img src="docs/images/music.png" alt="The Music tab glowing in the cover's colours: cover, title and controls on the left, synced lyrics on the right" width="560"></p>
 
@@ -108,7 +109,7 @@ Shows what is playing in **any** player (Spotify, YouTube in a browser, VLC...):
 
 ### Clipboard
 
-A history of what you copied (text, links, pictures, files), searchable, with **pin**, **copy back**, **delete**, and **text from pictures** (it reads the words in a screenshot). Stored encrypted for your Windows account. Text snippets you save are one click away. Anything a password manager marks as secret is not recorded, you can list apps to ignore, and unpinned copies are **deleted after 2 days**. Pinned items and snippets stay.
+A history of what you copied (text, links, pictures, files), searchable, with **pin**, **copy back**, **delete**, and **text from pictures** (it reads the words in a screenshot). Stored encrypted for your Windows account. Text snippets you save are one click away. Anything a password manager marks as secret is not recorded, you can list apps to ignore, and unpinned copies are **deleted after 2 days** (or 1, 7 or 30: Settings > Clipboard & Shelf). Pinned items and snippets stay.
 
 <p align="center"><img src="docs/images/clipboard.png" alt="The Clipboard tab in the Violet theme: a search box, filters and a list of recent copies, one of them pinned" width="420"></p>
 
@@ -130,7 +131,7 @@ Type for example "call mum at 18:30", "in 10m tea", "tomorrow 15:00 dentist" or 
 - **Wi-Fi** and **Bluetooth** cards. The round switch turns the radio on or off. Click the rest of a card to **expand it** into a list:
   - *Wi-Fi:* networks in range with signal bars. Networks Windows already knows get a **Connect** button; the connected one gets **Disconnect**. A brand-new network with a password is joined in Windows' own Wi-Fi page ("More in Windows").
   - *Bluetooth:* your paired devices, each marked **Connected** or **Not connected**. Headphones, earbuds and speakers get **Connect** / **Disconnect** buttons. Mice, controllers and phones only show their state, because Windows reconnects those by itself.
-- **Mic** mute for every app, **Sound** (opens Windows' sound page), a **Mirror** (your webcam, shown flipped like a mirror, for a quick look before a call), and an optional **Chat** drawer.
+- **Mic** mute for every app, **Sound** (opens Windows' sound page) and a **Mirror** (your webcam, shown flipped like a mirror, for a quick look before a call).
 - A line with a timer and a **Mute** button while any app is using your microphone (a call).
 - Six **launcher** slots: put your favourite apps there.
 
@@ -144,7 +145,7 @@ One card each for **CPU**, **GPU**, **memory**, **disk activity**, **network spe
 
 ### Activity (coding assistants)
 
-For people who use **Claude Code** or **Codex**: shows what each assistant is doing in each session (working, waiting for you, finished), your usage limits, and lets you **Allow** or **Deny** a permission question right on the pill. Connecting an assistant is explicit and never automatic: see the command-line helper in [docs/REFERENCE.md](docs/REFERENCE.md) (`pillboxctl hooks claude --apply`).
+For people who use **Claude Code** or **Codex**: shows what each assistant is doing in each session (working, waiting for you, finished), your usage limits, and lets you **Allow** or **Deny** a permission question right on the pill. The tab appears once an assistant is connected. Connecting one is explicit and never automatic: see the command-line helper in [docs/REFERENCE.md](docs/REFERENCE.md) (`pillboxctl hooks claude --apply`).
 
 <p align="center"><img src="docs/images/activity.png" alt="The Activity tab in the Lava theme: a Claude Code card saying Needs you, and three sessions (waiting, working, done)" width="420"></p>
 
@@ -186,15 +187,15 @@ Open **Settings** from the gear (or the tray icon). It is a normal window with e
 
 | Page | What is there |
 |---|---|
-| General | Start with Windows, where Pillbox sits and how big it is, hiding, opening |
-| Closed pill | What the small pill shows: the clock (or date, weather, battery...), the playing song, the call timer, the microphone dot, notices. Every one can be switched off, and **Music before calls** keeps the song on the pill while an app such as Discord holds the microphone |
+| General | Start with Windows, where Pillbox sits and how big it is, hiding, opening, the tabs and their order |
+| Closed pill | What the small pill shows: the clock (or date, weather, battery...), the playing song, the call timer, the microphone dot, device notices, the game recap. Every one can be switched off, and **Music before calls** keeps the song on the pill while an app such as Discord holds the microphone |
 | Appearance | Colours, themes, fades and glass |
 | Music | The song on the pill and the Music tab |
 | Home & widgets | The Home tab's widgets, weather and the System window |
 | Clipboard & Shelf | Clipboard history, snippets, the file shelf and your phone |
 | Notifications & calls | Windows notifications, calls and the microphone, reminders |
 | Games & Apps | What Pillbox does while you play, and rules for single apps |
-| Agents | Claude Code, Codex and the chat drawer |
+| Agents | Claude Code, Codex and the Activity tab |
 | Shortcuts | Keyboard shortcuts and the launcher |
 | About | Version, licence, your data, and resetting |
  Every change is **saved automatically** a moment after you make it and Pillbox applies it at once. Nothing needs an OK button. **About > Reset all settings** puts everything back (your clipboard history, reminders and shelf are kept).
@@ -219,7 +220,6 @@ All can be changed or cleared in Settings > Shortcuts.
 | Ctrl+Alt+Shift+M | Mute / unmute the microphone for every app |
 | Ctrl+Alt+S | Screenshot (saved to the shelf) |
 | Ctrl+Alt+C | Copy the colour under the pointer |
-| Ctrl+Alt+Shift+T | Open / close the chat drawer (if switched on) |
 
 ## Privacy: what stays on your PC
 
@@ -231,7 +231,6 @@ Pillbox is built to keep everything local.
   - *Weather* asks `open-meteo.com` for the weather at the place you pick (it sends that place's coordinates, nothing about you).
   - *Lyrics* send the song's title, artist and length to `lrclib.net`, once per song.
   - *Online widgets* (off by default) ping a host, ask for currency rates or air quality, or visit the websites you list.
-  - The *chat drawer* (off by default) loads the Twitch or YouTube chat page you give it.
   - *Claude usage numbers* (off by default; Settings > Agents) read your own Claude sign-in file on your PC to ask Anthropic for your usage.
 - *Phone transfer* and the command-line helper talk only inside your own network or on your own PC, with a random one-time token.
 - Pillbox can optionally be **hidden from screenshots and screen recordings** (Settings).
@@ -243,7 +242,6 @@ The long technical notes on every one of these, including exactly how phone tran
 - **Windows 10 and 11.** On Windows 10 a few things look or work differently:
   - The icons use Windows 10's icon set and the text uses Segoe UI, so it looks slightly plainer.
   - The glass surfaces (Acrylic, Liquid glass, Candy glass) show a tinted fill instead of the live blur of what is behind the pill. Windows 10 would draw a yellow frame around the whole screen while capturing it, so Pillbox does not capture there.
-  - The chat drawer needs the free Microsoft Edge WebView2 Runtime. Most Windows 10 PCs have it; the installer tells you if yours does not.
   - Windows notifications on the pill may not be allowed on every Windows 10 PC.
   - Windows versions before Windows 10 1809, and other systems, are not supported.
 - **Not signed.** Windows shows a one-time "protected your PC" warning (see [Download](#download-and-start-it-the-easy-way)).

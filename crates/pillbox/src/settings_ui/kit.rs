@@ -145,6 +145,8 @@ pub mod icon {
     pub const HOME: &str = "\u{E80F}";
     pub const GLOBE: &str = "\u{E774}";
     pub const CHAT: &str = "\u{E8F2}";
+    pub const DRIVE: &str = "\u{E88E}";
+    pub const HEADPHONES: &str = "\u{E7F6}";
     pub const CHECK: &str = "\u{E73E}";
     pub const WARNING: &str = "\u{E7BA}";
     pub const BOLT: &str = "\u{E945}";

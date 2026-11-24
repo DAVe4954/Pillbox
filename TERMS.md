@@ -30,7 +30,7 @@ allows. Nothing in these terms limits liability that cannot be limited by law.
 - Pillbox keeps everything on your own PC: settings, clipboard history, the shelf, reminders,
   notes, play time and logs. The author receives nothing.
 - **Clipboard history** stores what you copy, on your PC. Unpinned copies are deleted after two
-  days. Pinned items and snippets stay until you remove them.
+  days, or after 1, 7 or 30 if you choose so. Pinned items and snippets stay until you remove them.
 - Pillbox uses the internet **only for features you switch on**, and sends only what each one
   needs:
   - **Weather, air quality and place search:** your location's coordinates, or the place name
@@ -63,7 +63,7 @@ services you connect it to, and for keeping your own backups.
 ## 7. Parts made by others
 
 Pillbox includes open-source libraries, used under their own licences
-(see THIRD-PARTY-NOTICES.txt), and Microsoft's WebView2 loader. Names such as Windows,
+(see THIRD-PARTY-NOTICES.txt). Names such as Windows,
 Spotify, Discord, Roblox, Claude and Codex belong to their owners. Pillbox is not made,
 endorsed or supported by any of them.
 

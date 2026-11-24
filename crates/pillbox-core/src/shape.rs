@@ -175,8 +175,9 @@ pub const SYS_TAB_MAX_CARDS: usize = 6;
 pub enum Resting {
     /// The clock (or another short face, or nothing): as small as the text allows.
     Quiet { text: f32 },
-    /// A notification, flash, notice or call: the fixed `NOTICE_W`.
-    Notice,
+    /// A notification, flash, notice or call: `NOTICE_W`, or wider when the text (its width
+    /// with the icon and the space around it, 0 if it does not matter) needs it.
+    Notice { text: f32 },
     /// A song playing: cover, title (if shown) and bars (unless the visualizer is off); as wide
     /// as the title needs.
     Music {
@@ -189,6 +190,11 @@ pub enum Resting {
 /// Text size on the resting pill, as a share of its height: the clock face and the song title.
 pub const REST_TEXT: f32 = 0.44;
 pub const MUSIC_TEXT: f32 = 0.40;
+/// A notice with an icon: its text size, and the room the icon and the ends of the pill take,
+/// as shares of the pill's height.
+pub const NOTICE_TEXT: f32 = 0.38;
+pub const NOTICE_LEAD: f32 = 0.85;
+pub const NOTICE_PAD: f32 = 0.45;
 /// The resting pill is never narrower than this (it still reads as a pill with the clock).
 pub const RESTING_MIN_W: f32 = 88.0;
 /// A playing song's pill: at least this wide with a title, at most this wide in any case.
@@ -346,7 +352,7 @@ impl Placement {
     }
 
     /// The resting pill for what it shows. On the top edge the width follows the content: the
-    /// clock alone is small, a notification takes the fixed `NOTICE_W`, a song widens to
+    /// clock alone is small, a notification takes `NOTICE_W` or more, a song widens to
     /// its title. On the side edges the pill stands upright and keeps its size.
     pub fn resting(&self, what: Resting) -> Dims {
         if self.side != Side::Top {
@@ -356,7 +362,10 @@ impl Placement {
         let h = self.closed.h;
         let w = match what {
             Resting::Quiet { text } => (text + h).clamp(RESTING_MIN_W, MUSIC_MAX_W),
-            Resting::Notice => self.closed.w.max(RESTING_MIN_W),
+            Resting::Notice { text } => {
+                let least = self.closed.w.max(RESTING_MIN_W);
+                text.clamp(least, least.max(MUSIC_MAX_W))
+            }
             Resting::Music { title, art, bars } => {
                 let (_, _, left, right) = music_pill_metrics(h, art, bars);
                 match title {
@@ -676,7 +685,11 @@ mod tests {
         assert_eq!(t.resting(Resting::Quiet { text: 70.0 }).w, 70.0 + 36.0);
         assert_eq!(t.resting(Resting::Quiet { text: 10.0 }).w, RESTING_MIN_W);
         // A notification: the fixed width from the layout.
-        assert_eq!(t.resting(Resting::Notice).w, t.closed.w);
+        let notice = |text| t.resting(Resting::Notice { text });
+        assert_eq!(notice(0.0).w, t.closed.w);
+        // A long notice widens the pill, up to a limit.
+        assert_eq!(notice(260.0).w, 260.0);
+        assert_eq!(notice(900.0).w, MUSIC_MAX_W);
         // A song: cover + title + bars, between the music limits.
         let (_, _, left, right) = music_pill_metrics(36.0, true, true);
         let song = |w| {
@@ -699,7 +712,7 @@ mod tests {
             .w >= RESTING_MIN_W
         );
         // The configured height and corners, a little taller (same roundness) for a song.
-        assert_eq!(t.resting(Resting::Notice).h, t.closed.h);
+        assert_eq!(notice(0.0).h, t.closed.h);
         assert_eq!(t.resting(Resting::Quiet { text: 0.0 }).r, t.closed.r);
         let song_pill = t.resting(Resting::Music {
             title: None,
