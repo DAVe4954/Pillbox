@@ -1719,16 +1719,13 @@ fn progress(
 fn paint_music_compact(
     f: &mut Frame<'_>,
     s: &Scene<'_>,
+    m: &MusicView<'_>,
     (cl, ct, cr, cb): Rect,
     alpha: f32,
     ink: Ink,
     hits: &mut Vec<Hit>,
 ) {
     let k = s.scale;
-    let Some(m) = &s.music else {
-        let style = label(14.0 * k, false, ink.dim.fade(alpha), Align::Center);
-        return f.text("Nothing is playing", cl, ct, cr, cb, style);
-    };
 
     // Top block: cover, title and artist, transport buttons.
     let top_h = (cb - 24.0 * k) - ct;
@@ -1864,6 +1861,52 @@ fn paint_music_compact(
     }
 }
 
+/// The Music tab when nothing is playing: a faded sketch of the player with a made-up song, and a
+/// line under it that asks for some music. Nothing in it can be clicked.
+fn paint_music_example(
+    f: &mut Frame<'_>,
+    s: &Scene<'_>,
+    (cl, ct, cr, cb): Rect,
+    alpha: f32,
+    ink: Ink,
+) {
+    let k = s.scale;
+    let grey = Rgba::rgb(0x808080);
+    let lyrics = LyricsState::Off;
+    let sample = MusicView {
+        title: "Song title",
+        artist: "Artist",
+        playing: false,
+        position: 72.0,
+        duration: 214.0,
+        has_art: false,
+        palette: Palette {
+            dominant: grey,
+            accent: grey,
+            colors: [grey; 3],
+        },
+        bands: [0.0; BANDS],
+        lyrics: &lyrics,
+        scrub: None,
+        can_seek: false,
+        can_next: true,
+        can_previous: true,
+        glow: None,
+        lyrics_view: None,
+    };
+    let mut unused = Vec::new();
+    let sketch = (cl, ct, cr, cb - 22.0 * k);
+    paint_music_compact(f, s, &sample, sketch, alpha * 0.4, ink, &mut unused);
+    f.text(
+        "Play something to see it here",
+        cl,
+        cb - 20.0 * k,
+        cr,
+        cb,
+        label(13.0 * k, false, ink.dim.fade(alpha), Align::Center),
+    );
+}
+
 /// The Music tab. With the lyrics setting on the card is wide: the player on the left, the
 /// words on the right (a bigger card, `Placement::lyrics`). Without it, or on a side edge, the
 /// compact player fills the card.
@@ -1877,11 +1920,10 @@ fn paint_music(
 ) {
     let k = s.scale;
     let Some(m) = &s.music else {
-        let style = label(14.0 * k, false, ink.dim.fade(alpha), Align::Center);
-        return f.text("Nothing is playing", cl, ct, cr, cb, style);
+        return paint_music_example(f, s, (cl, ct, cr, cb), alpha, ink);
     };
     if !s.music_wide {
-        return paint_music_compact(f, s, (cl, ct, cr, cb), alpha, ink, hits);
+        return paint_music_compact(f, s, m, (cl, ct, cr, cb), alpha, ink, hits);
     }
     let left_w = ((cr - cl) * 0.43).round();
     paint_player_column(f, s, m, (cl, ct, cl + left_w, cb), alpha, ink, hits);
