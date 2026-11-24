@@ -2,7 +2,7 @@
 ; Installs for the current user only (no administrator prompt) into %LOCALAPPDATA%\Programs\Pillbox.
 
 #define AppName "Pillbox"
-#define AppVersion "0.1.3"
+#define AppVersion "0.1.4"
 
 [Setup]
 ; A fixed id, so a newer installer upgrades an older install instead of installing twice.
